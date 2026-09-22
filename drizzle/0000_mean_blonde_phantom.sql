@@ -1,0 +1,21 @@
+CREATE TABLE `problems` (
+	`id` text PRIMARY KEY NOT NULL,
+	`title` text NOT NULL,
+	`content` text NOT NULL,
+	`answer` text NOT NULL,
+	`explanation` text NOT NULL,
+	`question_type` text NOT NULL,
+	`topic` text NOT NULL,
+	`difficulty` text NOT NULL,
+	`language` text,
+	`source_type` text NOT NULL,
+	`source_name` text NOT NULL,
+	`source_url` text,
+	`source_year` integer,
+	`source_round` integer,
+	`created_at` integer DEFAULT (unixepoch()) NOT NULL,
+	`updated_at` integer DEFAULT (unixepoch()) NOT NULL,
+	CONSTRAINT "question_type_check" CHECK("problems"."question_type" in ('CODE_OUTPUT', 'SQL_OUTPUT', 'NORMALIZATION', 'NETWORK_CALCULATION', 'SHORT_ANSWER')),
+	CONSTRAINT "difficulty_check" CHECK("problems"."difficulty" in ('EASY', 'MEDIUM', 'HARD')),
+	CONSTRAINT "source_type_check" CHECK("problems"."source_type" in ('SAMPLE', 'MANUAL', 'GAMJA_REFERENCE', 'MOONEO_REFERENCE'))
+);

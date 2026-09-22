@@ -1,0 +1,1 @@
+ALTER TABLE `problems` ADD `accepted_answers` text;
