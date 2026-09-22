@@ -1,36 +1,303 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
 
-## Getting Started
+# 🌱 JungSil — 정실이
 
-First, run the development server:
+### 정보처리기사 실기, 외우는 공부에서 이해하는 공부로
+
+정실이는 **정보처리기사 실기 1회 합격**을 목표로 만드는
+개인 맞춤형 문제 풀이·코드 추적·오답 학습 서비스입니다.
+
+<br />
+
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat-square\&logo=nextdotjs\&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square\&logo=typescript\&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square\&logo=tailwindcss\&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square\&logo=sqlite\&logoColor=white)
+![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-C5F74F?style=flat-square\&logo=drizzle\&logoColor=black)
+![Ollama](https://img.shields.io/badge/Ollama-000000?style=flat-square\&logo=ollama\&logoColor=white)
+
+</div>
+
+---
+
+## 📌 정실이는 어떤 프로젝트인가요?
+
+정보처리기사 실기는 단순 암기만으로 대비하기 어렵습니다.
+
+특히 Java·C·Python 코드 문제나 SQL 실행 결과 문제는
+정답만 외우는 것보다 **코드가 어떤 순서로 실행되는지 이해하는 것**이 중요합니다.
+
+정실이는 문제를 풀고 끝내는 서비스가 아니라 다음 과정을 반복하도록 돕습니다.
+
+> 문제 풀이 → 실행 과정 확인 → 해설 이해 → 오답 기록 → 반복 학습
+
+시험까지 남은 **3주~1개월 동안 필요한 핵심 기능만 단계적으로 구현**합니다.
+
+---
+
+## 🎯 프로젝트 목표
+
+* 정보처리기사 실기 **1회 합격**
+* 코드 문제의 실행 흐름 이해
+* 취약한 유형과 반복되는 오답 확인
+* 실제 시험에 필요한 문제만 집중 학습
+* AI가 만들어 낸 답이 아닌, 근거가 있는 해설 제공
+* 사용자가 직접 설명할 수 있는 개인 프로젝트 완성
+
+---
+
+## ✨ 핵심 기능
+
+### 1. 실기 문제 풀이
+
+정보처리기사 실기 출제 유형별로 문제를 풀 수 있습니다.
+
+* 프로그래밍 코드 실행 결과
+* SQL 실행 결과
+* 데이터베이스 및 정규화
+* 네트워크 계산
+* 운영체제
+* 소프트웨어 설계 및 테스트
+* 보안
+* 용어 및 단답형 문제
+
+문제는 다음 조건으로 분류할 예정입니다.
+
+* 문제 유형
+* 학습 주제
+* 난이도
+* 프로그래밍 언어
+* 출제 회차
+
+### 2. 코드 실행 및 추적
+
+코드 문제를 눈으로만 해석하지 않고 실제 실행 결과와 흐름을 확인합니다.
+
+* Java 코드 안전 실행
+* 변수 값 변화 추적
+* 반복문과 조건문 실행 순서 확인
+* 메서드 호출 흐름 분석
+* 실행 결과와 예상 답안 비교
+
+### 3. AI 해설
+
+로컬 환경에서 실행하는 Ollama를 이용해 문제 해설을 제공합니다.
+
+* 정답이 나온 이유 설명
+* 오답을 선택한 원인 분석
+* 코드 실행 순서 단계별 설명
+* 관련 개념 보충
+* 비슷한 유형의 문제 생성
+
+AI 해설은 가능한 한 **문제 데이터와 실제 코드 실행 결과를 근거로 생성**하도록 설계합니다.
+
+### 4. 오답 관리
+
+틀린 문제를 저장하고 반복해서 학습할 수 있습니다.
+
+* 오답 자동 저장
+* 취약 주제 분류
+* 다시 풀기
+* 반복해서 틀린 문제 확인
+* 정답률 및 학습 기록 확인
+
+---
+
+## 🧩 지원 예정 문제 유형
+
+| 유형                    | 설명                     |
+| --------------------- | ---------------------- |
+| `CODE_OUTPUT`         | Java·C·Python 코드 실행 결과 |
+| `SQL_OUTPUT`          | SQL 실행 결과 및 쿼리 작성      |
+| `NORMALIZATION`       | 함수적 종속성과 정규화           |
+| `NETWORK_CALCULATION` | 서브넷, 호스트 수 등 네트워크 계산   |
+| `SHORT_ANSWER`        | 용어 및 개념 단답형            |
+| `MULTIPLE_CHOICE`     | 개념 확인 객관식              |
+| `SECURITY`            | 공격 기법, 암호화, 보안 용어      |
+| `DESIGN_PATTERN`      | 디자인 패턴 구분 및 적용         |
+
+---
+
+## 🛠 기술 스택
+
+| 구분          | 기술                  | 사용 목적             |
+| ----------- | ------------------- | ----------------- |
+| Frontend    | Next.js, TypeScript | 화면 및 서버 기능 구현     |
+| Styling     | Tailwind CSS        | 반응형 UI 구성         |
+| Database    | SQLite              | 문제와 학습 기록 저장      |
+| ORM         | Drizzle ORM         | 데이터베이스 모델 및 쿼리 관리 |
+| AI          | Ollama              | 로컬 AI 해설 생성       |
+| Code Runner | Docker              | Java 코드 격리 실행     |
+| Development | Codex               | 설계, 구현 및 테스트 지원   |
+
+---
+
+## 🗂️ 예상 프로젝트 구조
+
+```text
+JungSil/
+├─ app/
+│  ├─ api/                 # 문제, 답안, 실행 API
+│  ├─ problems/            # 문제 목록 및 상세 화면
+│  ├─ review/              # 오답 복습 화면
+│  └─ dashboard/           # 학습 현황 화면
+├─ components/             # 공통 UI 컴포넌트
+├─ db/
+│  ├─ schema.ts            # 데이터베이스 스키마
+│  └─ migrations/          # 마이그레이션
+├─ lib/
+│  ├─ ai/                  # Ollama 연동
+│  ├─ runner/              # 코드 실행 및 추적
+│  └─ problems/            # 문제 처리 로직
+├─ public/                 # 정적 파일
+├─ scripts/                # 데이터 정리 및 개발 스크립트
+└─ README.md
+```
+
+> 실제 개발 과정에 따라 폴더 구조는 변경될 수 있습니다.
+
+---
+
+## 🚀 실행 방법
+
+### 1. 저장소 이동
+
+```bash
+cd D:\Projects\JungSil
+```
+
+### 2. 패키지 설치
+
+```bash
+npm install
+```
+
+### 3. 개발 서버 실행
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 4. 브라우저 접속
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🗺️ 개발 로드맵
 
-To learn more about Next.js, take a look at the following resources:
+### Phase 1 — 기본 환경
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+* [x] 프로젝트 생성
+* [x] 프로젝트명 `JungSil` 결정
+* [ ] 기본 레이아웃 구성
+* [ ] 데이터베이스 연결
+* [ ] 문제 데이터 모델 설계
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Phase 2 — 문제 풀이
 
-## Deploy on Vercel
+* [ ] 문제 목록 화면
+* [ ] 문제 상세 화면
+* [ ] 답안 입력 및 채점
+* [ ] 유형·주제·난이도 필터
+* [ ] 해설 확인
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Phase 3 — 코드 문제
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+* [ ] Java 코드 실행 환경
+* [ ] 실행 결과 비교
+* [ ] 변수 값 변화 추적
+* [ ] 코드 구조 분석
+* [ ] 안전한 실행 제한 적용
+
+### Phase 4 — AI 해설
+
+* [ ] Ollama 연동
+* [ ] 문제별 해설 생성
+* [ ] 오답 원인 분석
+* [ ] 관련 개념 검색
+* [ ] 근거 기반 답변 검증
+
+### Phase 5 — 오답 학습
+
+* [ ] 오답 저장
+* [ ] 취약 유형 분석
+* [ ] 다시 풀기
+* [ ] 학습 통계
+* [ ] 시험 직전 복습 모드
+
+---
+
+## 📚 문제 데이터 원칙
+
+정실이는 정보처리기사 실기 시험 대비에 필요한 문제만 다룹니다.
+
+문제 유형과 학습 범위를 분석할 때 다음 자료를 참고합니다.
+
+* 정처기 감자
+* 문어CBT
+
+공개된 문제를 그대로 복제하기보다 다음 정보를 중심으로 정리합니다.
+
+* 출제 유형
+* 핵심 개념
+* 풀이 방식
+* 코드 실행 원리
+* 유사 문제 제작에 필요한 구조
+
+문제와 해설을 사용할 때는 각 자료의 이용 조건과 저작권을 확인합니다.
+
+---
+
+## 🚫 이번 프로젝트에서 하지 않는 것
+
+짧은 학습 기간 안에 실제로 사용할 수 있는 서비스를 완성하기 위해
+다음 기능은 초기 범위에서 제외합니다.
+
+* 여러 자격증을 동시에 지원하는 기능
+* 공기업 전공시험 전체 범위 제공
+* 불필요한 회원가입 및 소셜 로그인
+* 커뮤니티와 게시판
+* 복잡한 관리자 페이지
+* 근거 없이 답변하는 범용 AI 챗봇
+* 학습 목표와 관련 없는 기능 확장
+
+---
+
+## 💡 이름의 의미
+
+**JungSil(정실이)**은 `정보처리기사 실기`에서 가져온 이름입니다.
+
+딱딱한 시험 준비 프로그램보다
+매일 함께 공부하고 오답을 챙겨주는 친근한 학습 도우미를 지향합니다.
+
+> “정처기 실기는 정실이와 함께.”
+
+---
+
+## 👤 개발 목적
+
+이 프로젝트는 단순한 포트폴리오 전시용 프로젝트가 아닙니다.
+
+직접 정보처리기사 실기를 준비하면서 겪는 문제를 해결하고,
+실제로 매일 사용해 **합격 가능성을 높이는 것**이 가장 중요한 목적입니다.
+
+개발 과정에서는 다음 내용을 기록합니다.
+
+* 왜 이 기능이 필요한가?
+* 왜 이 기술을 선택했는가?
+* 개발 중 어떤 문제가 발생했는가?
+* 문제를 어떻게 해결했는가?
+* 실제 학습에 어떤 도움이 되었는가?
+
+---
+
+<div align="center">
+
+### 🌱 정실이와 함께 정보처리기사 실기 1회 합격하기
+
+**JungSil is growing with every solved problem.**
+
+</div>
