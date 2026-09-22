@@ -186,6 +186,109 @@ http://localhost:3000
 
 ---
 
+## 🌱 Phase 1 — Problem Core 실행 및 검증
+
+현재 구현 범위는 SQLite 문제 조회·필터와 `Problem → Solve → Submit → Result` 학습 흐름입니다.
+답안을 직접 입력해 서버에 제출한 뒤에만 정답 여부·내 답·정답·해설을 확인합니다.
+외부 문제 수집, AI, 코드·SQL 실행, 사용자 기록 저장은 포함하지 않습니다.
+
+### 처음 실행할 때
+
+Node.js 22 LTS 이상을 사용합니다. 프로젝트 루트에서 실행하세요.
+
+```bash
+npm install
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
+
+문제 목록: [http://localhost:3000/problems](http://localhost:3000/problems)
+
+- DB 위치: `data/jungsil.db`. 데이터 파일과 SQLite 저널은 Git에서 제외합니다.
+- 별도 환경변수나 `.env` 파일은 필요하지 않습니다. 실제 `.env*` 파일은 기존 규칙으로 제외합니다.
+- `db:migrate`는 생성된 `drizzle/` 마이그레이션을 적용하며 재실행해도 기존 데이터를 유지합니다.
+- `db:seed`는 자체 제작 샘플 5개를 추가합니다. 고정 ID가 이미 있으면 건너뛰며 기존 문제를 수정하지 않습니다.
+- 샘플은 `SAMPLE` / `JungSil Sample`로 저장하며 외부 사이트나 실제 기출문제에서 복사하지 않았습니다.
+- 스키마 변경 시 `npm run db:generate`로 SQL을 생성하고 내용을 검토한 뒤 `npm run db:migrate`를 실행합니다.
+
+### 내부 API
+
+| 경로 | 응답 |
+| --- | --- |
+| `GET /api/problems` | 정답 정보를 제외한 문제 배열 |
+| `GET /api/problems/[id]` | 정답 정보를 제외한 문제 객체, 없으면 404 |
+| `POST /api/problems/[id]/submit` | 서버 채점 결과, 없으면 404 |
+
+예: `/api/problems?questionType=CODE_OUTPUT&difficulty=EASY&language=Java`
+
+- `questionType`: `CODE_OUTPUT`, `SQL_OUTPUT`, `NORMALIZATION`, `NETWORK_CALCULATION`, `SHORT_ANSWER`
+- `difficulty`: `EASY`, `MEDIUM`, `HARD`
+- `topic`, `language`: 현재 DB에 저장된 값과 대소문자까지 정확히 일치해야 합니다. 화면 선택 목록에서 확인할 수 있습니다.
+- 필터 조합은 AND 조건입니다. 필터가 없거나 빈 문자열이면 해당 조건을 적용하지 않습니다. 정상 조건으로 결과가 없으면 `[]`를 반환합니다.
+- 잘못된 값, 중복 필터, 지원하지 않는 필터 이름은 400을 반환합니다.
+- 예상하지 못한 오류는 내부 경로나 SQL 없이 일반 오류 메시지와 500을 반환합니다.
+- ID는 문자열입니다. 샘플 상세 예: `/problems/sample-java-loop`
+- API와 서버 화면은 같은 조회 함수를 사용합니다. 날짜는 DB에 Unix 초 단위로 저장하고 API에서는 ISO 날짜 문자열로 반환합니다.
+- `updatedAt`은 Drizzle의 update 호출 시 갱신됩니다. 직접 SQL로 수정할 때는 호출자가 갱신해야 합니다.
+
+### 답안 제출 및 채점
+
+목록·상세 조회에서는 `answer`, `acceptedAnswers`, `explanation`을 조회하지 않습니다.
+상세 화면의 클라이언트 입력 폼에는 문제 ID와 유형만 전달하며, 정답 정보는 제출 응답으로만 받습니다.
+
+```json
+{ "userAnswer": "20" }
+```
+
+`POST /api/problems/sample-java-loop/submit` 응답 예:
+
+```json
+{
+  "correct": true,
+  "userAnswer": "20",
+  "correctAnswer": "20",
+  "explanation": "i가 1, 2, 3, 4일 때 각각 2, 4, 6, 8을 더합니다. 누적 합은 2 + 4 + 6 + 8 = 20입니다."
+}
+```
+
+- 빈 답안·공백뿐인 답안·문자열이 아닌 답안·잘못된 JSON은 400입니다. 답안은 최대 10,000자입니다.
+- DB 오류 등 예상하지 못한 오류는 내부 정보를 제외한 메시지와 500을 반환합니다.
+- `acceptedAnswers`는 nullable JSON 문자열 배열입니다. 기존 문제를 보존하는 컬럼 추가 마이그레이션을 적용합니다.
+- 대표 정답 `answer` 또는 추가 정답 `acceptedAnswers` 중 하나와 일치하면 정답입니다. null·빈 목록이면 대표 정답만 사용합니다.
+- 공통: 앞뒤 공백 제거, 대소문자 무시, CRLF/CR 줄바꿈을 LF로 통일, 연속된 일반 공백을 하나로 정리합니다.
+- `CODE_OUTPUT`: 각 줄 끝 공백을 추가로 제거하며 출력 내용과 줄 순서·내부 빈 줄을 비교합니다.
+- `SQL_OUTPUT`: 줄바꿈·공백·탭과 표 구분자 `|` 주변 공백 차이를 무시하고 값의 순서를 비교합니다. SQL을 실행하지 않습니다.
+- 나머지 유형: 공통 정규화 후 문자열을 비교합니다. 동의어나 다른 풀이 표현은 `acceptedAnswers`에 명시적으로 등록해야 합니다.
+- `SHORT_ANSWER`는 한 줄 input, 나머지는 기존 복합 답안을 입력할 수 있도록 textarea를 사용합니다.
+- 제출 중 입력과 버튼을 잠그고, 결과가 나오면 내 답·정답·해설을 표시합니다. 다시 풀기는 입력과 결과를 모두 초기화합니다.
+- 채점 결과나 제출 기록은 DB·브라우저 저장소에 저장하지 않습니다.
+
+### 검증
+
+앱이 실행 중인 상태에서 다른 터미널로 실행합니다. 별도 테스트 프레임워크 없이 Node.js assert를 사용합니다.
+
+```bash
+npm run lint
+npm run build
+npm test
+```
+
+테스트는 샘플이 입력된 로컬 앱을 대상으로 API·필터·채점·400/404·제출 전 HTML/RSC 정답 비노출을 검사합니다.
+DB 제약조건과 기존 데이터 마이그레이션은 메모리 DB에서 검사합니다. 허용 답안 테스트용 행은 트랜잭션으로 격리한 뒤 항상 롤백합니다.
+500 응답은 테스트 프로세스의 연결만 닫아서 검사하며, 학습 데이터와 서버 연결은 유지합니다.
+브라우저에서 빈 답안 안내, 정답·오답 표시, 다시 풀기의 입력·결과 초기화도 확인하세요.
+기본 테스트 주소는 `http://127.0.0.1:3000`이며 다른 포트는 PowerShell에서 다음처럼 지정합니다.
+
+```powershell
+$env:TEST_BASE_URL = 'http://127.0.0.1:3100'
+npm test
+```
+
+SQLite 파일을 유지할 수 있는 Node.js 실행 환경이 필요합니다. 정적 내보내기나 임시 파일시스템 기반 배포는 이번 Phase 범위에 포함하지 않습니다.
+
+---
+
 ## 🗺️ 개발 로드맵
 
 ### Phase 1 — 기본 환경
@@ -193,16 +296,16 @@ http://localhost:3000
 * [x] 프로젝트 생성
 * [x] 프로젝트명 `JungSil` 결정
 * [ ] 기본 레이아웃 구성
-* [ ] 데이터베이스 연결
-* [ ] 문제 데이터 모델 설계
+* [x] 데이터베이스 연결
+* [x] 문제 데이터 모델 설계
 
 ### Phase 2 — 문제 풀이
 
-* [ ] 문제 목록 화면
-* [ ] 문제 상세 화면
-* [ ] 답안 입력 및 채점
-* [ ] 유형·주제·난이도 필터
-* [ ] 해설 확인
+* [x] 문제 목록 화면
+* [x] 문제 상세 화면
+* [x] 답안 입력 및 채점
+* [x] 유형·주제·난이도 필터
+* [x] 해설 확인
 
 ### Phase 3 — 코드 문제
 
