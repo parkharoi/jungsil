@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { problems } from "@/db/schema";
+import { verifiedProblem } from "@/lib/problems";
 import { gradeAnswer } from "@/lib/grading";
 
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       acceptedAnswers: problems.acceptedAnswers,
       explanation: problems.explanation,
       questionType: problems.questionType,
-    }).from(problems).where(eq(problems.id, id)).get();
+    }).from(problems).where(and(verifiedProblem, eq(problems.id, id))).get();
     if (!problem) {
       return Response.json({ error: "문제를 찾을 수 없습니다." }, { status: 404 });
     }

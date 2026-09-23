@@ -41,7 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 # local SQLite databases and journal files
-/data/
+/data/*
+!/data/templates/
+data/private/
 *.db
 *.db-*
 *.sqlite

@@ -2,6 +2,9 @@ import { getDb } from "../src/db";
 import { problems } from "../src/db/schema";
 
 const source = {
+  verificationStatus: "VERIFIED" as const,
+  verificationNote: "개발 검증용 자체 제작 문제",
+  redistributionAllowed: true,
   sourceType: "SAMPLE" as const,
   sourceName: "JungSil Sample",
   sourceUrl: null,
