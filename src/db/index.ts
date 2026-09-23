@@ -11,6 +11,7 @@ export function getDb() {
     mkdirSync(directory, { recursive: true });
     const sqlite = new Database(join(directory, "jungsil.db"));
     sqlite.pragma("journal_mode = WAL");
+    sqlite.pragma("foreign_keys = ON");
     database = drizzle(sqlite);
   }
   return database;

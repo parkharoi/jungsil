@@ -1,215 +1,202 @@
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve, sep } from "node:path";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { eq } from "drizzle-orm";
-import { problems, type Problem } from "../src/db/schema";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { getDb } from "../src/db";
-import { GET as listRoute } from "../src/app/api/problems/route";
-import { GET as detailRoute } from "../src/app/api/problems/[id]/route";
-import { POST as submitRoute } from "../src/app/api/problems/[id]/submit/route";
+import { attemptContexts, examSets, problemAttempts, problems, type Problem } from "../src/db/schema";
 import { gradeAnswer } from "../src/lib/grading";
-import { readFileSync } from "node:fs";
+import { GET as list } from "../src/app/api/problems/route";
+import { GET as detail } from "../src/app/api/problems/[id]/route";
+import { POST as submit } from "../src/app/api/problems/[id]/submit/route";
+import { GET as attempts } from "../src/app/api/attempts/route";
+import { GET as wrongAnswers } from "../src/app/api/wrong-answers/route";
 
-const base = process.env.TEST_BASE_URL ?? "http://127.0.0.1:3000";
-type PublicProblem = Omit<Problem, "answer" | "acceptedAnswers" | "explanation">;
-
-function assertPublic(problem: object) {
-  for (const key of ["answer", "acceptedAnswers", "explanation"]) {
-    assert.equal(Object.hasOwn(problem, key), false, `${key} must not be exposed`);
+const request = (path: string) => new Request("http://localhost" + path);
+const context = (id: string) => ({ params: Promise.resolve({ id }) });
+const post = (id: string, body: unknown) => submit(new Request("http://localhost/submit", {
+  method: "POST", body: JSON.stringify(body),
+}), context(id));
+function assertPublic(value: object) {
+  for (const key of ["answer", "acceptedAnswers", "explanation", "memoryTip", "examTip"]) {
+    assert.equal(Object.hasOwn(value, key), false, key);
   }
-}
-
-function submitRequest(id: string, body: unknown) {
-  return new Request(`${base}/api/problems/${id}/submit`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
 }
 
 async function main() {
-  const response = await fetch(`${base}/api/problems`);
-  assert.equal(response.status, 200);
-  const all: PublicProblem[] = await response.json();
-  all.forEach(assertPublic);
-  const samples = all.filter((row) => row.id.startsWith("sample-"));
-  assert.equal(samples.length, 5);
-  for (const row of samples) {
-    assert.equal(row.sourceType, "SAMPLE");
-    assert.equal(row.sourceName, "JungSil Sample");
-    assert.equal(row.sourceUrl, null);
-    assert.equal(row.sourceYear, null);
-    assert.equal(row.sourceRound, null);
-    assert.ok(row.createdAt && row.updatedAt);
-    const detail = await fetch(`${base}/api/problems/${row.id}`);
-    assert.equal(detail.status, 200);
-    assert.deepEqual(await detail.json(), row);
-    const page = await fetch(`${base}/problems/${row.id}`);
-    assert.equal(page.status, 200);
-    const html = await page.text();
-    assert.ok(html.includes(row.title));
-    assert.ok(html.includes("JungSil Sample"));
-    assert.ok(html.includes("내 답안") && html.includes("제출하기"));
-    assert.ok(!html.includes('id="answer-heading"') && !html.includes('id="explanation-heading"'));
-    const stored = getDb().select().from(problems).where(eq(problems.id, row.id)).get()!;
-    assert.ok(!html.includes(stored.explanation), "Initial HTML must not contain the explanation");
-    const rsc = await (await fetch(`${base}/problems/${row.id}`, { headers: { RSC: "1" } })).text();
-    assert.ok(!rsc.includes(stored.explanation), "RSC payload must not contain the explanation");
-    const correct = await fetch(submitRequest(row.id, { userAnswer: `  ${stored.answer.toUpperCase().replace(/\n/g, "\r\n")}  ` }));
+  const root = process.cwd();
+  const temporary = mkdtempSync(join(tmpdir(), "jungsil-attempts-test-"));
+  process.chdir(temporary);
+  const db = getDb();
+  const sqlite = db.$client;
+  try {
+    migrate(db, { migrationsFolder: join(root, "drizzle") });
+    const fixture = db.insert(problems).values({
+      id: "test-attempts-" + crypto.randomUUID(), title: "검증용 문제", content: "약어",
+      answer: "Denial of Service", acceptedAnswers: ["DoS"], explanation: "검증용 비공개 해설",
+      questionType: "SHORT_ANSWER", topic: "보안", subTopic: "서비스 거부", language: null,
+      difficulty: "EASY", sourceType: "MANUAL", sourceName: "AUTOMATED_TEST_ONLY",
+      verificationStatus: "VERIFIED", verificationNote: "테스트 전용",
+    }).returning().get();
+    const before = db.select().from(problems).all();
+    migrate(db, { migrationsFolder: join(root, "drizzle") });
+    assert.deepEqual(db.select().from(problems).all(), before);
+    for (const table of [examSets, problems, problemAttempts]) {
+      const config = getTableConfig(table);
+      const columns = sqlite.pragma('table_info("' + config.name + '")') as { name: string; type: string; notnull: number }[];
+      assert.deepEqual(columns.map(c => [c.name, c.type.toLowerCase(), !!c.notnull]),
+        config.columns.map(c => [c.name, c.getSQLType(), c.notNull]));
+    }
+    assert.equal(sqlite.pragma("foreign_keys", { simple: true }), 1);
+    const indexes = sqlite.pragma("index_list(problem_attempts)") as { name: string }[];
+    for (const name of ["attempt_problem_idx", "attempt_submitted_idx", "attempt_correct_problem_idx"]) {
+      assert.ok(indexes.some(i => i.name === name));
+    }
+    console.log("PASS: migration repeatability, schema columns, foreign keys and indexes.");
+
+    const count = () => db.select().from(problemAttempts).all().length;
+    for (const body of [null, [], {}, { userAnswer: "" }, { userAnswer: " \t\r\n " },
+      { userAnswer: 20 }, { userAnswer: "x".repeat(10001) },
+      { userAnswer: "DoS", attemptContext: "INVALID" }, { userAnswer: "DoS", startedAt: 123 },
+      { userAnswer: "DoS", startedAt: "2026-02-30T00:00:00.000Z" },
+      { userAnswer: "DoS", startedAt: "9999-01-01T00:00:00.000Z" }]) {
+      assert.equal((await post(fixture.id, body)).status, 400);
+    }
+    assert.equal((await submit(new Request("http://localhost/submit", { method: "POST", body: "{" }), context(fixture.id))).status, 400);
+    assert.equal((await post("missing-problem", { userAnswer: "DoS" })).status, 404);
+    assert.equal(count(), 0);
+    const startedAt = new Date(Math.floor(Date.now() / 1000) * 1000 - 15000).toISOString();
+    const correct = await post(fixture.id, { userAnswer: "  dOs  ", startedAt });
     assert.equal(correct.status, 200);
     const result = await correct.json();
-    assert.equal(result.correct, true);
-    assert.equal(result.correctAnswer, stored.answer);
-    assert.equal(result.explanation, stored.explanation);
-    assert.equal(result.userAnswer, `  ${stored.answer.toUpperCase().replace(/\n/g, "\r\n")}  `);
-    assert.deepEqual(Object.keys(result).sort(), ["correct", "correctAnswer", "explanation", "userAnswer"]);
-    const wrong = await fetch(submitRequest(row.id, { userAnswer: "틀린 답안" }));
-    assert.equal(wrong.status, 200);
-    assert.equal((await wrong.json()).correct, false);
-  }
-  for (const body of [{}, { userAnswer: "" }, { userAnswer: " \t\r\n " }, { userAnswer: 20 }, { userAnswer: null }, { userAnswer: [] }, { userAnswer: "x".repeat(10001) }, null, []]) {
-    assert.equal((await fetch(submitRequest("sample-java-loop", body))).status, 400);
-  }
-  assert.equal((await fetch(`${base}/api/problems/sample-java-loop/submit`, { method: "POST", body: "{" })).status, 400);
-  assert.equal((await fetch(`${base}/api/problems/sample-java-loop/submit`, { method: "POST" })).status, 400);
-  assert.equal((await fetch(submitRequest("missing-problem", { userAnswer: "20" }))).status, 404);
-  for (const field of ["questionType", "topic", "difficulty", "language"] as const) {
-    for (const value of new Set(all.map((row) => row[field]).filter((v) => v !== null))) {
-      const filtered = await fetch(`${base}/api/problems?${new URLSearchParams({ [field]: value })}`);
-      assert.equal(filtered.status, 200);
-      assert.deepEqual(await filtered.json(), all.filter((row) => row[field] === value));
+    assert.equal(result.correct, true); assert.equal(result.score, 5);
+    assert.equal(result.userAnswer, "  dOs  ");
+    assert.equal(result.correctAnswer, fixture.answer); assert.equal(result.explanation, fixture.explanation);
+    assert.equal(typeof result.attemptId, "string");
+    const saved = db.select().from(problemAttempts).where(eq(problemAttempts.id, result.attemptId)).get()!;
+    assert.equal(saved.userAnswer, "  dOs  ");
+    assert.equal(saved.attemptContext, "PRACTICE");
+    assert.ok(saved.durationSeconds! >= 15);
+    assert.equal(saved.durationSeconds, (saved.submittedAt.getTime() - saved.startedAt!.getTime()) / 1000);
+    for (const userAnswer of ["wrong one", "wrong two"]) {
+      const response = await post(fixture.id, { userAnswer });
+      assert.equal(response.status, 200);
+      const value = await response.json(); assert.equal(value.correct, false); assert.equal(value.score, 0);
+      const row = db.select().from(problemAttempts).where(eq(problemAttempts.id, value.attemptId)).get()!;
+      assert.equal(row.startedAt, null); assert.equal(row.durationSeconds, null);
     }
-  }
-  const combined = new URLSearchParams({ questionType: "CODE_OUTPUT", topic: "반복문", difficulty: "EASY", language: "Java" });
-  const combinedResponse = await fetch(`${base}/api/problems?${combined}`);
-  assert.equal(combinedResponse.status, 200);
-  assert.deepEqual((await combinedResponse.json()).map((row: Problem) => row.id), ["sample-java-loop"]);
-  const empty = await fetch(`${base}/api/problems?questionType=NORMALIZATION&language=Java`);
-  assert.equal(empty.status, 200);
-  assert.deepEqual(await empty.json(), []);
-  const unfiltered = await fetch(`${base}/api/problems?questionType=&topic=&difficulty=&language=`);
-  assert.equal(unfiltered.status, 200);
-  assert.deepEqual(await unfiltered.json(), all);
-  for (const query of ["questionType=INVALID", "difficulty=INVALID", "language=INVALID", "topic=INVALID", "unknown=x", "difficulty=EASY&difficulty=HARD", "topic=%27%20OR%201%3D1--"]) {
-    const invalid = await fetch(`${base}/api/problems?${query}`);
-    assert.equal(invalid.status, 400, query);
-    assert.equal(typeof (await invalid.json()).error, "string");
-  }
-  assert.equal((await fetch(`${base}/api/problems/missing-problem`)).status, 404);
-  assert.equal((await fetch(`${base}/api/problems/%27%20OR%201%3D1--`)).status, 404);
-  const page = await fetch(`${base}/problems`);
-  assert.equal(page.status, 200);
-  const html = await page.text();
-  for (const row of samples) assert.ok(html.includes(row.title));
-  const filteredHtml = await (await fetch(`${base}/problems?${combined}`)).text();
-  assert.ok(filteredHtml.includes("Java 반복문의 누적 합"));
-  assert.ok(!filteredHtml.includes("C 배열과 포인터"));
-  const invalidHtml = await (await fetch(`${base}/problems?difficulty=INVALID`)).text();
-  assert.ok(invalidHtml.includes('role="alert"'));
-  const missingHtml = await (await fetch(`${base}/problems/missing-problem`)).text();
-  assert.ok(missingHtml.includes("문제를 찾을 수 없습니다."));
-  console.log("PASS: sample metadata, list/detail API, all filters, combined/empty filters, 400/404, list/detail pages.");
+    assert.equal(count(), 3);
+    assert.equal(new Set(db.select().from(problemAttempts).all().map(a => a.id)).size, 3);
+    assert.throws(() => db.delete(problems).where(eq(problems.id, fixture.id)).run(), /FOREIGN KEY/);
+    assert.throws(() => db.insert(problemAttempts).values({ problemId: "missing", userAnswer: "x", correct: false, score: 0 }).run(), /FOREIGN KEY/);
+    assert.throws(() => sqlite.prepare("UPDATE problem_attempts SET score = 1").run(), /CHECK/);
+    assert.throws(() => sqlite.prepare("UPDATE problem_attempts SET attempt_context = 'INVALID'").run(), /CHECK/);
+    assert.throws(() => sqlite.prepare("UPDATE problem_attempts SET duration_seconds = -1").run(), /CHECK/);
+    console.log("PASS: correct/wrong/repeated submissions, original answers, timing, invalid requests, deletion restriction.");
 
-  // Check constraints and timestamps without modifying the user's database.
-  const sqlite = new Database(":memory:");
-  const db = drizzle(sqlite);
-  try {
-    migrate(db, { migrationsFolder: "./drizzle" });
-    migrate(db, { migrationsFolder: "./drizzle" });
-    const sample = { ...getDb().select().from(problems).where(eq(problems.id, samples[0].id)).get()!, createdAt: undefined, updatedAt: undefined };
-    const inserted = db.insert(problems).values(sample).returning().get();
-    assert.ok(inserted.createdAt instanceof Date);
-    assert.ok(inserted.updatedAt instanceof Date);
-    for (const column of ["question_type", "difficulty", "source_type"]) {
-      assert.throws(() => sqlite.prepare(`UPDATE problems SET ${column} = ?`).run("INVALID"), /CHECK constraint/);
+    const history = await attempts(request("/api/attempts")).json();
+    assert.equal(history.length, 3); assert.equal(history[0].userAnswer, "wrong two");
+    assertPublic(history[0].problem);
+    assert.equal((await attempts(request("/api/attempts?correct=true")).json()).length, 1);
+    assert.equal((await attempts(request("/api/attempts?correct=false&problemId=" + fixture.id)).json()).length, 2);
+    assert.deepEqual(await attempts(request("/api/attempts?problemId=missing")).json(), []);
+    assert.equal((await attempts(request("/api/attempts?limit=1")).json()).length, 1);
+    const wrong = await wrongAnswers(request("/api/wrong-answers")).json();
+    assert.equal(wrong.length, 1); assert.equal(wrong[0].wrongCount, 2);
+    assert.equal(wrong[0].latestWrongAttempt.userAnswer, "wrong two");
+    assert.equal(wrong[0].problem.subTopic, "서비스 거부");
+    assert.equal(wrong[0].problem.topic, "보안"); assert.equal(wrong[0].problem.language, null);
+    assert.equal(wrong[0].problem.questionType, "SHORT_ANSWER"); assertPublic(wrong[0].problem);
+    for (const query of ["limit=0", "limit=201", "limit=1.5", "limit=NaN", "limit=1&limit=2", "unknown=x"]) {
+      assert.equal(attempts(request("/api/attempts?" + query)).status, 400);
+      assert.equal(wrongAnswers(request("/api/wrong-answers?" + query)).status, 400);
     }
-    sqlite.prepare("UPDATE problems SET updated_at = 0").run();
-    db.update(problems).set({ title: "Updated" }).where(eq(problems.id, inserted.id)).run();
-    assert.ok(db.select().from(problems).get()!.updatedAt.getTime() > 0);
-    assert.equal(db.insert(problems).values(sample).onConflictDoNothing().run().changes, 0);
-  } finally {
-    sqlite.close();
-  }
-  console.log("PASS: repeatable migration, DB enum constraints, timestamp defaults/update, duplicate prevention.");
-
-  // Verify the actual additive migration preserves a row created with the old schema.
-  const legacy = new Database(":memory:");
-  try {
-    legacy.exec(readFileSync("drizzle/0000_mean_blonde_phantom.sql", "utf8"));
-    legacy.prepare("INSERT INTO problems (id, title, content, answer, explanation, question_type, topic, difficulty, source_type, source_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("legacy", "기존 문제", "내용", "20", "기존 해설", "CODE_OUTPUT", "반복문", "EASY", "SAMPLE", "JungSil Sample");
-    const before = legacy.prepare("SELECT * FROM problems").get();
-    legacy.exec(readFileSync("drizzle/0001_nice_reavers.sql", "utf8"));
-    assert.deepEqual(legacy.prepare("SELECT * FROM problems").get(), { ...before as object, accepted_answers: null });
-  } finally {
-    legacy.close();
-  }
-
-  const checks: [Problem["questionType"], string, string, boolean][] = [
-    ["SHORT_ANSWER", "DoS", "  dOs  ", true],
-    ["SHORT_ANSWER", "Denial of Service", " DENIAL   OF   SERVICE ", true],
-    ["CODE_OUTPUT", "A B\nC", " a   b  \r\nc\t  ", true],
-    ["CODE_OUTPUT", "A\nB", "B\nA", false],
-    ["CODE_OUTPUT", "A\nB", "A B", false],
-    ["CODE_OUTPUT", "AB", "A B", false],
-    ["CODE_OUTPUT", "A\nB", "A\n\nB", false],
-    ["SQL_OUTPUT", "A | 10\nB | 20", " a|10 \r\n\r\n b  |   20 ", true],
-    ["SQL_OUTPUT", "A | 10\nB | 20", "A|10 B|20", true],
-    ["SQL_OUTPUT", "A | 10\nB | 20", "B | 20\nA | 10", false],
-    ["SQL_OUTPUT", "A | 10", "A | 11", false],
-    ["NORMALIZATION", "제1정규형", " 제1정규형 ", true],
-    ["NETWORK_CALCULATION", "30", " 30 ", true],
-  ];
-  for (const [questionType, answer, userAnswer, expected] of checks) {
-    assert.equal(gradeAnswer({ questionType, answer }, userAnswer), expected, `${questionType}: ${userAnswer}`);
-  }
-  for (const questionType of ["SHORT_ANSWER", "NORMALIZATION", "NETWORK_CALCULATION"] as const) {
-    assert.equal(gradeAnswer({ questionType, answer: "대표 정답", acceptedAnswers: ["대체 표현", "Alternative"] }, " ALTERNATIVE "), true);
-    assert.equal(gradeAnswer({ questionType, answer: "대표 정답", acceptedAnswers: null }, "대체 표현"), false);
-    assert.equal(gradeAnswer({ questionType, answer: "대표 정답", acceptedAnswers: [] }, "대표 정답"), true);
-  }
-  assert.equal(gradeAnswer({ questionType: "SHORT_ANSWER", answer: "", acceptedAnswers: [""] }, "  "), false);
-
-  // The fixture is only visible to this test connection and is always rolled back.
-  const connection = getDb();
-  connection.$client.exec("BEGIN");
-  try {
-    const fixture = connection.insert(problems).values({
-      verificationStatus: "VERIFIED", verificationNote: "검증용",
-      title: "채점 검증", content: "약어를 입력하세요.", answer: "Denial of Service",
-      acceptedAnswers: ["DoS", "서비스 거부 공격"], explanation: "검증용 해설",
-      questionType: "SHORT_ANSWER", topic: "보안", difficulty: "EASY", sourceType: "SAMPLE", sourceName: "Test",
-    }).returning().get();
-    const context = { params: Promise.resolve({ id: fixture.id }) };
-    const publicResponse = await detailRoute(new Request(`${base}/api/problems/${fixture.id}`), context);
-    assertPublic(await publicResponse.json());
-    for (const userAnswer of [" dos ", "서비스 거부 공격"]) {
-      const accepted = await submitRoute(submitRequest(fixture.id, { userAnswer }), context);
-      assert.equal(accepted.status, 200);
-      assert.deepEqual(await accepted.json(), { correct: true, userAnswer, correctAnswer: fixture.answer, explanation: fixture.explanation });
+    for (const query of ["correct=1", "correct=", "problemId=", "correct=true&correct=false"]) {
+      assert.equal(attempts(request("/api/attempts?" + query)).status, 400);
     }
-  } finally {
-    connection.$client.exec("ROLLBACK");
-  }
-  console.log("PASS: secret-free GET/HTML/RSC, submission true/false/400/404, normalization, accepted answers, legacy migration preservation.");
+    for (const attemptContext of attemptContexts) {
+      assert.equal((await post(fixture.id, { userAnswer: "DoS", attemptContext })).status, 200);
+      assert.equal(db.select().from(problemAttempts).all().at(-1)!.attemptContext, attemptContext);
+    }
+    // A later correct answer does not erase historical wrong answers.
+    assert.equal((await wrongAnswers(request("/api/wrong-answers")).json())[0].wrongCount, 2);
+    for (let i = 0; i < 51; i++) {
+      db.insert(problemAttempts).values({ problemId: fixture.id, userAnswer: "DoS", correct: true, score: 5 }).run();
+    }
+    assert.equal((await attempts(request("/api/attempts")).json()).length, 50);
+    assert.equal((await attempts(request("/api/attempts?limit=200")).json()).length, count());
+    console.log("PASS: attempt filters/limits/order, latest wrong answer/count, all four contexts.");
 
-  // Close only this test process's connection to simulate DB failure safely.
-  getDb().$client.close();
-  const failureResponses = [
-    listRoute(new Request(`${base}/api/problems`)),
-    await detailRoute(new Request(`${base}/api/problems/sample-java-loop`), { params: Promise.resolve({ id: "sample-java-loop" }) }),
-  ];
-  for (const failure of failureResponses) {
+    const publicRows = await list(request("/api/problems")).json();
+    assert.equal(publicRows.length, 1); assertPublic(publicRows[0]);
+    assertPublic(await (await detail(request("/api/problems/" + fixture.id), context(fixture.id))).json());
+    for (const query of ["topic=" + encodeURIComponent("보안"), "difficulty=EASY", "questionType=SHORT_ANSWER",
+      "topic=" + encodeURIComponent("보안") + "&difficulty=EASY&questionType=SHORT_ANSWER", "topic=&language="]) {
+      assert.equal((await list(request("/api/problems?" + query)).json()).length, 1);
+    }
+    assert.equal(list(request("/api/problems?unknown=x")).status, 400);
+    assert.equal(list(request("/api/problems?difficulty=INVALID")).status, 400);
+    assert.deepEqual(await list(request("/api/problems?questionType=CODE_OUTPUT")).json(), []);
+    for (const status of ["DRAFT", "REVIEW_REQUIRED", "CONFLICTED"] as const) {
+      db.update(problems).set({ verificationStatus: status }).where(eq(problems.id, fixture.id)).run();
+      assert.deepEqual(await list(request("/api/problems")).json(), []);
+      assert.equal((await detail(request("/api/problems/" + fixture.id), context(fixture.id))).status, 404);
+      const n = count();
+      assert.equal((await post(fixture.id, { userAnswer: "DoS" })).status, 404);
+      assert.equal(count(), n);
+    }
+    db.update(problems).set({ verificationStatus: "VERIFIED" }).where(eq(problems.id, fixture.id)).run();
+    const n = count();
+    sqlite.exec("CREATE TEMP TRIGGER fail_attempt BEFORE INSERT ON problem_attempts BEGIN SELECT RAISE(ABORT, 'test write failure'); END");
+    const failure = await post(fixture.id, { userAnswer: "DoS" });
     assert.equal(failure.status, 500);
-    assert.deepEqual(await failure.json(), { error: "문제를 불러오지 못했습니다." });
-  }
-  console.log("PASS: both API handlers return sanitized 500 responses on database failure.");
-  const submitFailure = await submitRoute(submitRequest("sample-java-loop", { userAnswer: "20" }), { params: Promise.resolve({ id: "sample-java-loop" }) });
-  assert.equal(submitFailure.status, 500);
-  assert.deepEqual(await submitFailure.json(), { error: "답안을 채점하지 못했습니다." });
-  console.log("PASS: submission handler returns a sanitized 500 response.");
-}
+    assert.deepEqual(await failure.json(), { error: "답안을 채점하지 못했습니다." });
+    assert.equal(count(), n);
+    assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
+    console.log("PASS: list/detail/filter secrecy, verified-only submission, write failure returns 500 without saving.");
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+    const checks: [Problem["questionType"], string, string, boolean][] = [
+      ["SHORT_ANSWER", "DoS", "  dOs  ", true],
+      ["SHORT_ANSWER", "Denial of Service", " DENIAL   OF   SERVICE ", true],
+      ["CODE_OUTPUT", "A B\nC", " a   b  \r\nc\t  ", true],
+      ["CODE_OUTPUT", "A\nB", "B\nA", false],
+      ["CODE_OUTPUT", "A\nB", "A B", false],
+      ["CODE_OUTPUT", "AB", "A B", false],
+      ["CODE_OUTPUT", "A\nB", "A\n\nB", false],
+      ["SQL_OUTPUT", "A | 10\nB | 20", " a|10 \r\n\r\n b  |   20 ", true],
+      ["SQL_OUTPUT", "A | 10\nB | 20", "A|10 B|20", true],
+      ["SQL_OUTPUT", "A | 10\nB | 20", "B | 20\nA | 10", false],
+      ["SQL_OUTPUT", "A | 10", "A | 11", false],
+      ["NORMALIZATION", "제1정규형", " 제1정규형 ", true],
+      ["NETWORK_CALCULATION", "30", " 30 ", true],
+    ];
+    for (const [questionType, answer, userAnswer, expected] of checks) {
+      assert.equal(gradeAnswer({ questionType, answer }, userAnswer), expected, `${questionType}: ${userAnswer}`);
+    }
+    for (const questionType of ["SHORT_ANSWER", "NORMALIZATION", "NETWORK_CALCULATION"] as const) {
+      assert.equal(gradeAnswer({ questionType, answer: "대표 정답", acceptedAnswers: ["대체 표현", "Alternative"] }, " ALTERNATIVE "), true);
+      assert.equal(gradeAnswer({ questionType, answer: "대표 정답", acceptedAnswers: null }, "대체 표현"), false);
+      assert.equal(gradeAnswer({ questionType, answer: "대표 정답", acceptedAnswers: [] }, "대표 정답"), true);
+    }
+    assert.equal(gradeAnswer({ questionType: "SHORT_ANSWER", answer: "", acceptedAnswers: [""] }, "  "), false);
+
+    sqlite.close();
+    for (const response of [attempts(request("/api/attempts")), wrongAnswers(request("/api/wrong-answers")),
+      list(request("/api/problems")), await detail(request("/api/problems/x"), context("x")),
+      await post(fixture.id, { userAnswer: "DoS" })]) {
+      assert.equal(response.status, 500);
+      const error = await response.json();
+      assert.equal(typeof error.error, "string"); assert.equal(Object.hasOwn(error, "attemptId"), false);
+    }
+    console.log("PASS: existing normalization/accepted answers and sanitized database failures.");
+  } finally {
+    if (sqlite.open) sqlite.close();
+    process.chdir(root);
+    assert.ok(resolve(temporary).startsWith(resolve(tmpdir()) + sep));
+    rmSync(temporary, { recursive: true, force: true });
+    console.log("CLEANUP: isolated test database removed; learning database untouched.");
+  }
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

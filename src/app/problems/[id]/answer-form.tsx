@@ -20,6 +20,7 @@ export default function AnswerForm({ problemId, questionType }: {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const submitting = useRef(false);
+  const startedAt = useRef<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,7 +36,7 @@ export default function AnswerForm({ problemId, questionType }: {
       const response = await fetch(`/api/problems/${encodeURIComponent(problemId)}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAnswer }),
+        body: JSON.stringify({ userAnswer, startedAt: startedAt.current }),
       });
       if (!response.ok) {
         setError(response.status === 404 ? "문제를 찾을 수 없습니다."
@@ -56,7 +57,10 @@ export default function AnswerForm({ problemId, questionType }: {
     id: "user-answer",
     name: "userAnswer",
     value: userAnswer,
-    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setUserAnswer(event.target.value),
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      startedAt.current ??= new Date().toISOString();
+      setUserAnswer(event.target.value);
+    },
     disabled: pending,
     required: true,
     maxLength: 10000,
@@ -86,6 +90,7 @@ export default function AnswerForm({ problemId, questionType }: {
           </dl>
           <div className="mt-6 flex flex-wrap items-center gap-5">
             <button type="button" onClick={() => {
+              startedAt.current = null;
               setUserAnswer("");
               setResult(null);
               setError("");

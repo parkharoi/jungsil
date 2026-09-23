@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const questionTypes = [
   "CODE_OUTPUT", "SQL_OUTPUT", "NORMALIZATION", "NETWORK_CALCULATION", "SHORT_ANSWER",
@@ -70,3 +70,25 @@ export const problems = sqliteTable("problems", {
 ]);
 
 export type Problem = typeof problems.$inferSelect;
+
+export const attemptContexts = ["PRACTICE", "PAST_EXAM_SESSION", "MOCK_EXAM", "WRONG_ANSWER_RETRY"] as const;
+
+export const problemAttempts = sqliteTable("problem_attempts", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  problemId: text("problem_id").notNull().references(() => problems.id, { onDelete: "restrict" }),
+  userAnswer: text("user_answer").notNull(),
+  correct: integer("correct", { mode: "boolean" }).notNull(),
+  score: integer("score").notNull().default(0),
+  startedAt: integer("started_at", { mode: "timestamp" }),
+  submittedAt: integer("submitted_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  durationSeconds: integer("duration_seconds"),
+  attemptContext: text("attempt_context", { enum: attemptContexts }).notNull().default("PRACTICE"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  index("attempt_problem_idx").on(table.problemId),
+  index("attempt_submitted_idx").on(table.submittedAt),
+  index("attempt_correct_problem_idx").on(table.correct, table.problemId),
+  check("attempt_score_check", sql`(${table.correct} = 1 and ${table.score} = 5) or (${table.correct} = 0 and ${table.score} = 0)`),
+  check("attempt_context_check", sql`${table.attemptContext} in ('PRACTICE', 'PAST_EXAM_SESSION', 'MOCK_EXAM', 'WRONG_ANSWER_RETRY')`),
+  check("attempt_duration_check", sql`(${table.startedAt} is null and ${table.durationSeconds} is null) or (${table.startedAt} is not null and ${table.durationSeconds} is not null and ${table.durationSeconds} >= 0 and ${table.submittedAt} >= ${table.startedAt} and ${table.durationSeconds} = ${table.submittedAt} - ${table.startedAt})`),
+]);
