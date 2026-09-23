@@ -11,8 +11,10 @@ export const difficultyLabels: Record<Problem["difficulty"], string> = {
 };
 
 // Public reads never select grading data, including data serialized into pages.
+export const verifiedProblem = eq(problems.verificationStatus, "VERIFIED");
+
 const publicColumns = {
-  id: problems.id, title: problems.title, content: problems.content,
+  code: problems.code, id: problems.id, title: problems.title, content: problems.content,
   questionType: problems.questionType, topic: problems.topic,
   difficulty: problems.difficulty, language: problems.language,
   sourceType: problems.sourceType, sourceName: problems.sourceName,
@@ -28,17 +30,17 @@ export function getFilterOptions() {
   return {
     questionType: [...questionTypes],
     topic: db.selectDistinct({ value: problems.topic }).from(problems)
-      .orderBy(asc(problems.topic)).all().map((row) => row.value),
+      .where(verifiedProblem).orderBy(asc(problems.topic)).all().map((row) => row.value),
     difficulty: [...difficulties],
     language: db.selectDistinct({ value: problems.language }).from(problems)
-      .where(isNotNull(problems.language)).orderBy(asc(problems.language))
+      .where(and(verifiedProblem, isNotNull(problems.language))).orderBy(asc(problems.language))
       .all().map((row) => row.value!),
   };
 }
 
 export function listProblems(params: URLSearchParams) {
   const options = getFilterOptions();
-  const conditions = [];
+  const conditions = [verifiedProblem];
   for (const [key, value] of params) {
     if (!Object.hasOwn(options, key) || params.getAll(key).length !== 1) {
       throw new InvalidFilterError("지원하지 않거나 중복된 필터입니다.");
@@ -56,5 +58,5 @@ export function listProblems(params: URLSearchParams) {
 }
 
 export function findProblem(id: string) {
-  return getDb().select(publicColumns).from(problems).where(eq(problems.id, id)).get();
+  return getDb().select(publicColumns).from(problems).where(and(verifiedProblem, eq(problems.id, id))).get();
 }

@@ -174,6 +174,7 @@ async function main() {
   connection.$client.exec("BEGIN");
   try {
     const fixture = connection.insert(problems).values({
+      verificationStatus: "VERIFIED", verificationNote: "검증용",
       title: "채점 검증", content: "약어를 입력하세요.", answer: "Denial of Service",
       acceptedAnswers: ["DoS", "서비스 거부 공격"], explanation: "검증용 해설",
       questionType: "SHORT_ANSWER", topic: "보안", difficulty: "EASY", sourceType: "SAMPLE", sourceName: "Test",

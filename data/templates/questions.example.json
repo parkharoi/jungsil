@@ -1,0 +1,36 @@
+{
+  "exam": {
+    "certification": "JungSil 자체 제작 연습",
+    "examYear": 2026,
+    "examRound": 1,
+    "examDate": "2026-01-01",
+    "title": "자체 제작 샘플 회차 (실제 시험 아님)",
+    "questionCount": 1,
+    "sourceType": "SAMPLE",
+    "verificationStatus": "VERIFIED"
+  },
+  "problems": [
+    {
+      "questionNumber": 1,
+      "questionType": "CODE_OUTPUT",
+      "topic": "PROGRAMMING",
+      "subTopic": "ARRAY",
+      "difficulty": "EASY",
+      "language": "Python",
+      "content": "다음 자체 제작 Python 코드의 출력 결과를 쓰세요.",
+      "code": "values = [4, 7, 2]\nprint(values[0] + values[2])",
+      "answer": "6",
+      "acceptedAnswers": [],
+      "explanation": "첫 원소 4와 세 번째 원소 2를 더하므로 6을 출력합니다.",
+      "memoryTip": "리스트 인덱스는 0부터 시작합니다.",
+      "examTip": "인덱스와 원소 값을 구분하세요.",
+      "sourceType": "SAMPLE",
+      "sourceName": "JungSil Sample",
+      "sourceUrl": null,
+      "secondarySourceUrl": null,
+      "verificationStatus": "VERIFIED",
+      "verificationNote": "개발 검증용 자체 제작 문제. 실제 시험과 무관합니다.",
+      "redistributionAllowed": true
+    }
+  ]
+}

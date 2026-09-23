@@ -10,7 +10,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
-    "test": "tsx scripts/check-problem-core.ts"
+    "test": "tsx scripts/check-problem-core.ts",
+    "test:import": "tsx scripts/check-question-import.ts",
+    "questions:validate": "tsx scripts/questions.ts validate",
+    "questions:import": "tsx scripts/questions.ts import"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

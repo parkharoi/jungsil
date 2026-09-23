@@ -27,6 +27,7 @@ export default async function ProblemPage({ params }: { params: Promise<{ id: st
       <section aria-labelledby="content-heading" className="mt-8">
         <h2 id="content-heading" className="text-xl font-semibold">문제</h2>
         <pre className="mt-4 whitespace-pre-wrap break-words rounded-xl border border-zinc-200 p-5 font-mono text-sm leading-7 dark:border-zinc-800">{problem.content}</pre>
+        {problem.code && <pre aria-label="문제 코드" className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 p-5 font-mono text-sm leading-7 dark:border-zinc-800"><code>{problem.code}</code></pre>}
       </section>
       <AnswerForm key={problem.id} problemId={problem.id} questionType={problem.questionType} />
       <section aria-labelledby="source-heading" className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
