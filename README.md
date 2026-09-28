@@ -190,7 +190,7 @@ http://localhost:3000
 
 현재 구현 범위는 SQLite 문제 조회·필터와 `Problem → Solve → Submit → Result` 학습 흐름입니다.
 답안을 직접 입력해 서버에 제출한 뒤에만 정답 여부·내 답·정답·해설을 확인합니다.
-외부 문제 수집, AI, 코드·SQL 실행, 사용자 기록 저장은 포함하지 않습니다.
+풀이 기록과 오답 조회 API를 제공합니다. 외부 문제 수집, AI, 코드·SQL 실행은 포함하지 않습니다.
 
 ### 처음 실행할 때
 
@@ -199,7 +199,6 @@ Node.js 22 LTS 이상을 사용합니다. 프로젝트 루트에서 실행하세
 ```bash
 npm install
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
@@ -208,8 +207,8 @@ npm run dev
 - DB 위치: `data/jungsil.db`. 데이터 파일과 SQLite 저널은 Git에서 제외합니다.
 - 별도 환경변수나 `.env` 파일은 필요하지 않습니다. 실제 `.env*` 파일은 기존 규칙으로 제외합니다.
 - `db:migrate`는 생성된 `drizzle/` 마이그레이션을 적용하며 재실행해도 기존 데이터를 유지합니다.
-- `db:seed`는 자체 제작 샘플 5개를 추가합니다. 고정 ID가 이미 있으면 건너뛰며 기존 문제를 수정하지 않습니다.
-- 샘플은 `SAMPLE` / `JungSil Sample`로 저장하며 외부 사이트나 실제 기출문제에서 복사하지 않았습니다.
+- 자동 seed는 없습니다. 학습 문제는 검토한 로컬 JSON을 Import하여 등록합니다.
+- 변경 전 백업: `npx tsx scripts/backup-database.ts`. SQLite 온라인 백업을 만들고 무결성·스키마·전체 행을 대조합니다. 백업은 `data/backups/`에 저장되며 Git에서 제외됩니다.
 - 스키마 변경 시 `npm run db:generate`로 SQL을 생성하고 내용을 검토한 뒤 `npm run db:migrate`를 실행합니다.
 
 ### 내부 API
@@ -218,7 +217,9 @@ npm run dev
 | --- | --- |
 | `GET /api/problems` | 정답 정보를 제외한 문제 배열 |
 | `GET /api/problems/[id]` | 정답 정보를 제외한 문제 객체, 없으면 404 |
-| `POST /api/problems/[id]/submit` | 서버 채점 결과, 없으면 404 |
+| `POST /api/problems/[id]/submit` | 기록 저장 후 attemptId·점수·채점 결과, 없으면 404 |
+| `GET /api/attempts` | 최근 풀이 기록과 문제 기본 정보 |
+| `GET /api/wrong-answers` | 문제별 오답 횟수와 가장 최근 오답 |
 
 예: `/api/problems?questionType=CODE_OUTPUT&difficulty=EASY&language=Java`
 
@@ -228,7 +229,7 @@ npm run dev
 - 필터 조합은 AND 조건입니다. 필터가 없거나 빈 문자열이면 해당 조건을 적용하지 않습니다. 정상 조건으로 결과가 없으면 `[]`를 반환합니다.
 - 잘못된 값, 중복 필터, 지원하지 않는 필터 이름은 400을 반환합니다.
 - 예상하지 못한 오류는 내부 경로나 SQL 없이 일반 오류 메시지와 500을 반환합니다.
-- ID는 문자열입니다. 샘플 상세 예: `/problems/sample-java-loop`
+- ID는 문자열입니다. 상세 경로: `/problems/[id]`
 - API와 서버 화면은 같은 조회 함수를 사용합니다. 날짜는 DB에 Unix 초 단위로 저장하고 API에서는 ISO 날짜 문자열로 반환합니다.
 - `updatedAt`은 Drizzle의 update 호출 시 갱신됩니다. 직접 SQL로 수정할 때는 호출자가 갱신해야 합니다.
 
@@ -241,11 +242,13 @@ npm run dev
 { "userAnswer": "20" }
 ```
 
-`POST /api/problems/sample-java-loop/submit` 응답 예:
+`POST /api/problems/[id]/submit` 응답 예:
 
 ```json
 {
+  "attemptId": "생성된 UUID",
   "correct": true,
+  "score": 5,
   "userAnswer": "20",
   "correctAnswer": "20",
   "explanation": "i가 1, 2, 3, 4일 때 각각 2, 4, 6, 8을 더합니다. 누적 합은 2 + 4 + 6 + 8 = 20입니다."
@@ -262,28 +265,39 @@ npm run dev
 - 나머지 유형: 공통 정규화 후 문자열을 비교합니다. 동의어나 다른 풀이 표현은 `acceptedAnswers`에 명시적으로 등록해야 합니다.
 - `SHORT_ANSWER`는 한 줄 input, 나머지는 기존 복합 답안을 입력할 수 있도록 textarea를 사용합니다.
 - 제출 중 입력과 버튼을 잠그고, 결과가 나오면 내 답·정답·해설을 표시합니다. 다시 풀기는 입력과 결과를 모두 초기화합니다.
-- 채점 결과나 제출 기록은 DB·브라우저 저장소에 저장하지 않습니다.
+- 정답·오답 모두 `problem_attempts`에 원본 답안과 함께 저장합니다. 저장 실패는 500이며 성공 응답을 반환하지 않습니다.
+- 정답은 5점, 오답은 0점입니다. ID는 UUID이며 기록이 있는 문제는 외래키 RESTRICT로 삭제를 막습니다.
+- 제출 본문의 선택 필드: `startedAt` (UTC ISO 문자열, 예: `2026-09-23T06:00:00.000Z`), `attemptContext` (기본 `PRACTICE`).
+- `attemptContext`는 `PRACTICE`, `PAST_EXAM_SESSION`, `MOCK_EXAM`, `WRONG_ANSWER_RETRY`를 지원합니다. 세션 관리 기능은 아직 없습니다.
+- 시작 시각이 없으면 `startedAt`·`durationSeconds`는 null입니다. 화면은 첫 답안 입력부터 제출까지 측정하며 다시 풀기 시 초기화합니다. 클라이언트 시각 기반 참고값입니다.
+- `GET /api/attempts?correct=false&problemId=ID&limit=50`: `correct=true|false`, `problemId` 필터를 AND로 적용합니다.
+- 두 조회 API 모두 기본 50개·최대 200개이며 `limit`은 양의 정수입니다. 잘못된 값·중복·알 수 없는 필터는 400입니다.
+- 풀이 기록은 제출 시각 내림차순이며 같은 초에는 삽입 순서 역순입니다. 오답 조회도 가장 최근 오답 순서입니다.
+- 오답 응답: `{ problem: { id, title, topic, subTopic, language, questionType, difficulty }, wrongCount, latestWrongAttempt: { attemptId, userAnswer, submittedAt } }`.
+- 나중에 맞혀도 과거 오답 횟수는 유지합니다. 조회 API는 정답·해설을 반환하지 않습니다. 문제 메타데이터는 현재 문제 내용을 사용합니다.
 
 ### 검증
 
-앱이 실행 중인 상태에서 다른 터미널로 실행합니다. 별도 테스트 프레임워크 없이 Node.js assert를 사용합니다.
+별도 테스트 프레임워크 없이 Node.js assert를 사용합니다.
 
 ```bash
+npm test
+npm run test:import
 npm run lint
 npm run build
-npm test
 ```
 
-테스트는 샘플이 입력된 로컬 앱을 대상으로 API·필터·채점·400/404·제출 전 HTML/RSC 정답 비노출을 검사합니다.
-DB 제약조건과 기존 데이터 마이그레이션은 메모리 DB에서 검사합니다. 허용 답안 테스트용 행은 트랜잭션으로 격리한 뒤 항상 롤백합니다.
-500 응답은 테스트 프로세스의 연결만 닫아서 검사하며, 학습 데이터와 서버 연결은 유지합니다.
-브라우저에서 빈 답안 안내, 정답·오답 표시, 다시 풀기의 입력·결과 초기화도 확인하세요.
-기본 테스트 주소는 `http://127.0.0.1:3000`이며 다른 포트는 PowerShell에서 다음처럼 지정합니다.
+`npm test`는 임시 DB에서 마이그레이션·스키마·제약조건·기존 채점 규칙·목록/상세/필터·풀이 저장·오답 집계·400/404/500을 검사하고 임시 폴더를 정리합니다. 학습 DB나 실행 중인 앱이 필요하지 않습니다.
+
+실제 HTTP·HTML/RSC 검증은 프로젝트 루트의 DB를 사용하는 앱을 실행한 뒤 별도로 수행합니다.
 
 ```powershell
-$env:TEST_BASE_URL = 'http://127.0.0.1:3100'
-npm test
+$env:TEST_BASE_URL = 'http://127.0.0.1:3000'
+npm run test:http
 ```
+
+HTTP 검증은 `test-http-UUID` 문제 한 개와 제출 기록을 생성한 뒤, 성공·실패 모두 해당 ID의 데이터만 정리합니다. 강제 종료 시에는 출력된 테스트 ID를 확인해야 합니다.
+브라우저에서 첫 입력 이후 시간 측정, 정답·오답 표시, 다시 풀기도 확인할 수 있습니다.
 
 SQLite 파일을 유지할 수 있는 Node.js 실행 환경이 필요합니다. 정적 내보내기나 임시 파일시스템 기반 배포는 이번 Phase 범위에 포함하지 않습니다.
 

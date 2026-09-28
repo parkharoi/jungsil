@@ -73,7 +73,7 @@ npm run questions:import -- --file data/private/2026-2.json --resolve-conflicts
 npm run test:import
 npm run lint
 npm run build
-# 샘플 데이터가 있는 앱 실행 중:
+# 별도 서버 없이 임시 DB에서 검증:
 npm test
 ```
 

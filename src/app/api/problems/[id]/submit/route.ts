@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { problems } from "@/db/schema";
+import { attemptContexts, problemAttempts, problems } from "@/db/schema";
 import { verifiedProblem } from "@/lib/problems";
 import { gradeAnswer } from "@/lib/grading";
 
@@ -22,6 +22,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (body.userAnswer.length > 10000) {
       return Response.json({ error: "답안은 10,000자 이내로 입력해 주세요." }, { status: 400 });
     }
+    const attemptContext = "attemptContext" in body ? body.attemptContext : "PRACTICE";
+    if (typeof attemptContext !== "string" || !attemptContexts.includes(attemptContext as typeof attemptContexts[number])) {
+      return Response.json({ error: "유효하지 않은 풀이 유형입니다." }, { status: 400 });
+    }
+    const submittedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+    let startedAt: Date | null = null;
+    if ("startedAt" in body && body.startedAt !== null) {
+      if (typeof body.startedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(body.startedAt)) {
+        return Response.json({ error: "startedAt은 UTC ISO 날짜여야 합니다." }, { status: 400 });
+      }
+      const parsed = new Date(body.startedAt);
+      if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== body.startedAt || parsed.getTime() > Date.now()) {
+        return Response.json({ error: "유효하지 않은 시작 시각입니다." }, { status: 400 });
+      }
+      startedAt = new Date(Math.floor(parsed.getTime() / 1000) * 1000);
+    }
     const { id } = await params;
     const problem = getDb().select({
       answer: problems.answer,
@@ -32,8 +48,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!problem) {
       return Response.json({ error: "문제를 찾을 수 없습니다." }, { status: 404 });
     }
+    const correct = gradeAnswer(problem, body.userAnswer);
+    const score = correct ? 5 : 0;
+    const attempt = getDb().insert(problemAttempts).values({
+      problemId: id, userAnswer: body.userAnswer, correct, score, startedAt, submittedAt,
+      durationSeconds: startedAt ? (submittedAt.getTime() - startedAt.getTime()) / 1000 : null,
+      attemptContext: attemptContext as typeof attemptContexts[number],
+    }).returning({ id: problemAttempts.id }).get();
     return Response.json({
-      correct: gradeAnswer(problem, body.userAnswer),
+      attemptId: attempt.id, correct, score,
       userAnswer: body.userAnswer,
       correctAnswer: problem.answer,
       explanation: problem.explanation,
