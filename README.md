@@ -272,9 +272,26 @@ npm run dev
 - 시작 시각이 없으면 `startedAt`·`durationSeconds`는 null입니다. 화면은 첫 답안 입력부터 제출까지 측정하며 다시 풀기 시 초기화합니다. 클라이언트 시각 기반 참고값입니다.
 - `GET /api/attempts?correct=false&problemId=ID&limit=50`: `correct=true|false`, `problemId` 필터를 AND로 적용합니다.
 - 두 조회 API 모두 기본 50개·최대 200개이며 `limit`은 양의 정수입니다. 잘못된 값·중복·알 수 없는 필터는 400입니다.
-- 풀이 기록은 제출 시각 내림차순이며 같은 초에는 삽입 순서 역순입니다. 오답 조회도 가장 최근 오답 순서입니다.
+- 풀이 기록은 제출 시각 내림차순이며 같은 초에는 삽입 순서 역순입니다.
 - 오답 응답: `{ problem: { id, title, topic, subTopic, language, questionType, difficulty }, wrongCount, latestWrongAttempt: { attemptId, userAnswer, submittedAt } }`.
-- 나중에 맞혀도 과거 오답 횟수는 유지합니다. 조회 API는 정답·해설을 반환하지 않습니다. 문제 메타데이터는 현재 문제 내용을 사용합니다.
+- 나중에 맞혀도 과거 오답 횟수는 유지합니다. 풀이 기록 API는 정답·해설을 반환하지 않습니다. 오답노트는 이미 틀린 문제의 정답·해설을 반환합니다. 문제 메타데이터·정답·해설은 현재 문제 내용을 사용합니다.
+
+
+### 오답노트와 취약점 분석
+
+- `/wrong-answers`: 전체 오답 요약, 출처·연도·회차·유형·주제·세부 주제·언어·복습 상태 필터와 다시 풀기.
+- `GET /api/wrong-answers`: 기본 50개·최대 200개, `offset` 페이지 이동. 미복습 → 복습 중 → 복습 완료, 오답 횟수 내림차순, 최근 오답 순으로 정렬합니다.
+- 추가 필터: `sourceType`, `examYear`, `examRound`, `questionType`, `topic`, `subTopic`, `language`, `reviewStatus`. 빈 값은 전체이며 `language=NONE`·`subTopic=NONE`은 null을 뜻합니다.
+- 응답에는 `problemId, title, content, questionType, topic, subTopic, language, difficulty, sourceType, examYear, examRound, questionNumber, wrongCount, totalAttemptCount, latestWrongAnswer, correctAnswer, explanation, latestWrongAt, latestAttemptCorrect, consecutiveCorrectCount, reviewStatus`를 포함합니다. 기존 `problem`·`latestWrongAttempt`도 유지합니다.
+- 연도·회차는 연결된 `exam_sets`를 우선 사용하고, 없으면 문제의 `source_year`·`source_round`를 사용합니다.
+- 가장 최근 오답 이후 `WRONG_ANSWER_RETRY` 정답이 0회면 `NOT_REVIEWED`, 1회면 `REVIEWING`, 2회 이상이면 `MASTERED`입니다. 일반 정답은 포함하지 않으며 어떤 모드든 다시 틀리면 초기화합니다. 같은 초의 제출은 기존 삽입 순서로 구분합니다.
+- `/problems/[id]?mode=retry`는 새 입력 폼으로 시작하고, 제출 후 연속 정답 횟수·복습 상태를 보여줍니다. 저장과 상태 조회는 같은 트랜잭션에서 수행합니다.
+- `/stats`, `GET /api/stats/weaknesses`: 전체 제출·정오답·정답률·고유 문제 수·미해결 오답과 `groups.topic/subTopic/language/questionType/sourceType`, `recommendations`를 반환합니다. 각 그룹은 기본 50개·최대 200개(`limit`)이며 취약도 순으로 제한합니다. 전체 합계는 제한과 무관합니다.
+- 정답률은 제출 기준이고 판정 최소 표본은 고유 문제 3개입니다. 3개 미만은 데이터 부족, 60% 미만은 취약, 60% 이상 75% 미만은 주의, 75% 이상은 양호입니다. 고유 3개 이상에서 반복 오답 2회 이상·정답률 60% 미만이면 집중 복습을 우선합니다.
+- `repeatedWrongCount`는 문제별 `max(오답 횟수 - 1, 0)`의 합입니다. 미해결 오답은 오답 이력이 있고 MASTERED가 아닌 고유 문제 수입니다.
+- 추천은 반복 미복습 문제 → 집중 복습 주제 → 취약 언어 → 복습 중 문제 → 7일간 풀지 않은 취약 주제 순으로 최대 5개입니다. 동일 링크를 중복 추천하지 않습니다.
+- 문제 목록·상세 API와 재풀이 전 HTML/RSC는 정답을 노출하지 않습니다. 오답노트에서만 이미 틀린 문제의 정답·해설을 보여줍니다.
+- 통계·상태 테이블과 마이그레이션을 추가하지 않습니다. SQL 집계 후 제한된 결과만 읽으며 문제 수에 비례하는 개별 조회를 하지 않습니다. 화면의 요약은 전체 기록 기준입니다.
 
 ### 검증
 
@@ -283,6 +300,7 @@ npm run dev
 ```bash
 npm test
 npm run test:import
+npm run test:learning
 npm run lint
 npm run build
 ```

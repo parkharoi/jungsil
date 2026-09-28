@@ -3,16 +3,20 @@
 import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import type { Problem } from "@/db/schema";
+import { reviewLabels, type ReviewStatus } from "@/lib/learning-labels";
 
 type Result = {
   correct: boolean;
   userAnswer: string;
   correctAnswer: string;
   explanation: string;
+  consecutiveCorrectCount?: number;
+  reviewStatus?: ReviewStatus;
 };
 
-export default function AnswerForm({ problemId, questionType }: {
+export default function AnswerForm({ problemId, questionType, retry = false }: {
   problemId: string;
+  retry?: boolean;
   questionType: Problem["questionType"];
 }) {
   const [userAnswer, setUserAnswer] = useState("");
@@ -36,7 +40,7 @@ export default function AnswerForm({ problemId, questionType }: {
       const response = await fetch(`/api/problems/${encodeURIComponent(problemId)}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userAnswer, startedAt: startedAt.current }),
+        body: JSON.stringify({ userAnswer, startedAt: startedAt.current, attemptContext: retry ? "WRONG_ANSWER_RETRY" : "PRACTICE" }),
       });
       if (!response.ok) {
         setError(response.status === 404 ? "문제를 찾을 수 없습니다."
@@ -71,11 +75,13 @@ export default function AnswerForm({ problemId, questionType }: {
 
   return (
     <section className="mt-8" aria-label="답안 입력 및 채점">
+      {retry && <p className="mb-4 text-sm font-semibold text-emerald-700 dark:text-emerald-400">오답 재풀이 · 답안을 제출한 뒤 정답과 해설을 확인하세요.</p>}
       {result ? (
         <div>
           <h2 role="status" className={`text-2xl font-bold ${result.correct ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"}`}>
             {result.correct ? "정답입니다." : "오답입니다."}
           </h2>
+          {retry && result.reviewStatus && <p className="mt-3" role="status">연속 재풀이 정답 {result.consecutiveCorrectCount}회 · {reviewLabels[result.reviewStatus]}</p>}
           <dl className="mt-5 grid gap-5">
             {[
               ["내가 제출한 답", result.userAnswer],
@@ -95,7 +101,7 @@ export default function AnswerForm({ problemId, questionType }: {
               setResult(null);
               setError("");
             }} className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800">다시 풀기</button>
-            <Link href="/problems" className="underline underline-offset-4">문제 목록으로 돌아가기</Link>
+            <Link href={retry ? "/wrong-answers" : "/problems"} className="underline underline-offset-4">{retry ? "오답노트로 돌아가기" : "문제 목록으로 돌아가기"}</Link>
           </div>
         </div>
       ) : (

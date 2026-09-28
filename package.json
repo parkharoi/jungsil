@@ -13,7 +13,8 @@
     "test:import": "tsx scripts/check-question-import.ts",
     "questions:validate": "tsx scripts/questions.ts validate",
     "questions:import": "tsx scripts/questions.ts import",
-    "test:http": "tsx scripts/check-problem-http.ts"
+    "test:http": "tsx scripts/check-problem-http.ts",
+    "test:learning": "tsx scripts/check-learning.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -6,7 +6,11 @@ import { difficultyLabels, findProblem, questionTypeLabels } from "@/lib/problem
 export const dynamic = "force-dynamic";
 export const metadata = { title: "문제 상세 | JungSil" };
 
-export default async function ProblemPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProblemPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const retry = (await searchParams).mode === "retry";
   const { id } = await params;
   const problem = findProblem(id);
   if (!problem) notFound();
@@ -29,7 +33,7 @@ export default async function ProblemPage({ params }: { params: Promise<{ id: st
         <pre className="mt-4 whitespace-pre-wrap break-words rounded-xl border border-zinc-200 p-5 font-mono text-sm leading-7 dark:border-zinc-800">{problem.content}</pre>
         {problem.code && <pre aria-label="문제 코드" className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 p-5 font-mono text-sm leading-7 dark:border-zinc-800"><code>{problem.code}</code></pre>}
       </section>
-      <AnswerForm key={problem.id} problemId={problem.id} questionType={problem.questionType} />
+      <AnswerForm key={problem.id + (retry ? ":retry" : ":practice")} problemId={problem.id} questionType={problem.questionType} retry={retry} />
       <section aria-labelledby="source-heading" className="mt-10 border-t border-zinc-200 pt-6 dark:border-zinc-800">
         <h2 id="source-heading" className="font-semibold">출처 정보</h2>
         <dl className="mt-3 grid gap-2 text-sm text-zinc-600 dark:text-zinc-400">
