@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,7 +24,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <nav aria-label="주요 메뉴" className="border-b border-zinc-200 dark:border-zinc-800">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4 sm:px-8">
+            <Link href="/" className="font-bold text-emerald-700 dark:text-emerald-400">JungSil</Link>
+            <Link href="/problems" className="text-sm underline-offset-4 hover:underline">문제 풀이</Link>
+            <Link href="/wrong-answers" className="text-sm underline-offset-4 hover:underline">오답노트</Link>
+            <Link href="/stats" className="text-sm underline-offset-4 hover:underline">취약점 분석</Link>
+          </div>
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }
