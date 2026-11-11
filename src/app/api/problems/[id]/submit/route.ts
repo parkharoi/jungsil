@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { attemptContexts, problemAttempts, problems } from "@/db/schema";
 import { verifiedProblem } from "@/lib/problems";
+import { gradeParts, isBlankType } from "@/lib/answer-parts";
 import { gradeAnswer } from "@/lib/grading";
 import { getReviewState } from "@/lib/reviews";
 
@@ -16,12 +17,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!(error instanceof SyntaxError)) throw error;
       return Response.json({ error: "올바른 JSON 형식으로 답안을 보내주세요." }, { status: 400 });
     }
-    if (!body || typeof body !== "object" || !("userAnswer" in body)
-      || typeof body.userAnswer !== "string" || !body.userAnswer.trim()) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return Response.json({ error: "답안을 입력해 주세요." }, { status: 400 });
-    }
-    if (body.userAnswer.length > 10000) {
-      return Response.json({ error: "답안은 10,000자 이내로 입력해 주세요." }, { status: 400 });
     }
     const attemptContext = "attemptContext" in body ? body.attemptContext : "PRACTICE";
     if (typeof attemptContext !== "string" || !attemptContexts.includes(attemptContext as typeof attemptContexts[number])) {
@@ -42,6 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params;
     const problem = getDb().select({
       answer: problems.answer,
+      answerParts: problems.answerParts,
       acceptedAnswers: problems.acceptedAnswers,
       explanation: problems.explanation,
       questionType: problems.questionType,
@@ -49,8 +47,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!problem) {
       return Response.json({ error: "문제를 찾을 수 없습니다." }, { status: 404 });
     }
-    const userAnswer = body.userAnswer;
-    const correct = gradeAnswer(problem, userAnswer);
+    const parts = isBlankType(problem.questionType) ? problem.answerParts : null;
+    let userAnswer: string;
+    let results: ReturnType<typeof gradeParts> | undefined;
+    if (parts?.length) {
+      const answers = "userAnswers" in body ? body.userAnswers : null;
+      if (!answers || typeof answers !== "object" || Array.isArray(answers) || "userAnswer" in body
+        || Object.keys(answers).length !== parts.length
+        || !parts.every(part => Object.hasOwn(answers, part.key))
+        || !Object.values(answers).every(value => typeof value === "string" && value.trim() && value.length <= 10000)) {
+        return Response.json({ error: "정의된 모든 빈칸에 답안을 입력해 주세요. 빈칸당 10,000자까지 가능합니다." }, { status: 400 });
+      }
+      const submitted = answers as Record<string, string>;
+      userAnswer = JSON.stringify(Object.fromEntries(parts.map(part => [part.key, submitted[part.key]])));
+      results = gradeParts(parts, submitted);
+    } else {
+      if (!("userAnswer" in body) || typeof body.userAnswer !== "string" || !body.userAnswer.trim()
+        || body.userAnswer.length > 10000 || "userAnswers" in body) {
+        return Response.json({ error: "답안은 비어 있지 않은 10,000자 이하 문자열이어야 합니다." }, { status: 400 });
+      }
+      userAnswer = body.userAnswer;
+    }
+    const correct = results ? results.every(result => result.correct) : gradeAnswer(problem, userAnswer);
     const score = correct ? 5 : 0;
     const { attempt, review } = getDb().transaction(tx => {
       const attempt = tx.insert(problemAttempts).values({
@@ -63,7 +81,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     return Response.json({
       attemptId: attempt.id, correct, score, ...(review ?? {}),
-      userAnswer: body.userAnswer,
+      userAnswer,
+      ...(results ? { results, correctParts: results.filter(result => result.correct).length, totalParts: results.length } : {}),
       correctAnswer: problem.answer,
       explanation: problem.explanation,
     }, { headers: { "Cache-Control": "no-store" } });

@@ -34,7 +34,7 @@ async function main() {
       ["null 검수", q => { Reflect.set(q.problems[0], "verificationStatus", null); }],
       ["정답", q => { q.problems[0].answer = " "; }],
       ["번호 범위", q => { q.problems[0].questionNumber = 0; }],
-      ["문제 수", q => { q.exam.questionCount = 2; }],
+      ["빈 파일", q => { q.problems = []; }],
       ["복원 출처", q => { q.problems[0].sourceType = "RESTORED_EXAM"; }],
       ["해설", q => { q.problems[0].explanation = " "; }],
       ["검수 메모", q => { q.problems[0].verificationNote = " "; }],

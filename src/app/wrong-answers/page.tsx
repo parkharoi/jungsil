@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { scholarVoice } from "@/lib/scholar-voice";
 import { getWrongSummary, listWrongAnswers, wrongFilterKeys } from "@/lib/reviews";
 import { difficultyLabels, InvalidFilterError, questionTypeLabels } from "@/lib/problems";
 import { languages, questionTypes, sourceTypes } from "@/db/schema";
@@ -27,7 +28,7 @@ export default async function WrongAnswersPage({ searchParams }: { searchParams:
   const pageHref = (next: number) => { const p = new URLSearchParams(query); p.set("offset", String(next)); return "/wrong-answers?" + p; };
   return <main className="mx-auto w-full max-w-5xl px-5 py-10 sm:px-8">
     <h1 className="text-3xl font-bold">오답노트</h1>
-    <p className="mt-3 text-zinc-600 dark:text-zinc-400">다시 풀어 연속 두 번 맞히면 복습 완료로 표시합니다. 일반 문제 풀이 정답은 복습 횟수에 포함하지 않습니다.</p>
+    <p className="mt-3 text-zinc-600 dark:text-zinc-400">틀렸다고 기죽지 마시오. 여기서 다시 풀어 연속 두 번 맞히면 복습 완료라오. 일반 문제 풀이 정답은 복습 횟수에 포함하지 않소.</p>
     <dl className="my-6 grid grid-cols-2 gap-3 sm:grid-cols-5">{[
       ["전체 오답 문제", summary.total], ["미복습", summary.notReviewed], ["복습 중", summary.reviewing],
       ["복습 완료", summary.mastered], ["가장 많이 틀린 분야", summary.mostWrongTopic ?? "아직 없음"],
@@ -56,13 +57,20 @@ export default async function WrongAnswersPage({ searchParams }: { searchParams:
         </div>
         <h2 className="mt-3 text-xl font-semibold">{row.title}</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{questionTypeLabels[row.questionType]} · {row.topic} / {row.subTopic ?? "세부 주제 없음"} · {row.language ?? "언어 없음"} · {difficultyLabels[row.difficulty]}</p>
-        <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+        {row.results ? <div className="mt-5">
+          <p className="font-semibold">최근 오답 전체 결과: 오답 · 빈칸 정답 {row.results.filter(part => part.correct).length}/{row.results.length}</p>
+          <ul className="mt-3 grid gap-3">{row.results.map(part => <li key={part.key} className="min-w-0 rounded-lg bg-zinc-100 p-3 dark:bg-zinc-900">
+            <p>{part.key} · {part.correct ? "정답" : "오답"}</p>
+            <p className="whitespace-pre-wrap break-words">내 답: {part.userAnswer || "(기록 없음)"}</p>
+            <p className="whitespace-pre-wrap break-words">정확한 답: {part.correctAnswer}</p>
+          </li>)}</ul>
+        </div> : <dl className="mt-5 grid gap-4 sm:grid-cols-2">
           <div><dt className="text-sm text-zinc-500">최근에 틀린 답</dt><dd className="mt-1 whitespace-pre-wrap break-words">{row.latestWrongAnswer}</dd></div>
           <div><dt className="text-sm text-zinc-500">정확한 답</dt><dd className="mt-1 whitespace-pre-wrap break-words">{row.correctAnswer}</dd></div>
-        </dl>
+        </dl>}
         <p className="mt-4 text-sm">오답 {row.wrongCount}회 / 전체 풀이 {row.totalAttemptCount}회 · 연속 재풀이 정답 {row.consecutiveCorrectCount}회</p>
         <p className="mt-1 text-sm text-zinc-500">최근 오답: <time dateTime={row.latestWrongAt}>{new Date(row.latestWrongAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</time></p>
-        <p className="mt-4 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-600 dark:text-zinc-400">{row.explanation}</p>
+        <p className="mt-4 line-clamp-3 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-600 dark:text-zinc-400">{scholarVoice(row.explanation)}</p>
         <Link href={"/problems/" + encodeURIComponent(row.problemId) + "?mode=retry"} className="mt-5 inline-block rounded-lg bg-emerald-700 px-5 py-2.5 font-semibold text-white hover:bg-emerald-800">다시 풀기</Link>
       </li>)}</ul>}
     {!error && <nav aria-label="오답 페이지" className="mt-6 flex gap-6">

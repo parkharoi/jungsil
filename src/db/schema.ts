@@ -2,8 +2,10 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const questionTypes = [
-  "CODE_OUTPUT", "SQL_OUTPUT", "NORMALIZATION", "NETWORK_CALCULATION", "SHORT_ANSWER",
+  "CODE_OUTPUT", "SQL_OUTPUT", "NORMALIZATION", "NETWORK_CALCULATION", "SHORT_ANSWER", "SQL_BLANK", "CODE_BLANK",
 ] as const;
+export type AnswerPart = { key: string; label?: string; answer: string; acceptedAnswers?: string[] };
+
 export const difficulties = ["EASY", "MEDIUM", "HARD"] as const;
 export const importSourceTypes = ["RESTORED_EXAM", "JUNGSIL_PREDICTED", "SAMPLE", "MANUAL"] as const;
 export const sourceTypes = [...importSourceTypes, "GAMJA_REFERENCE", "MOONEO_REFERENCE"] as const;
@@ -45,9 +47,12 @@ export const problems = sqliteTable("problems", {
   title: text("title").notNull(),
   content: text("content").notNull(),
   answer: text("answer").notNull(),
+  answerParts: text("answer_parts", { mode: "json" }).$type<AnswerPart[]>(),
   acceptedAnswers: text("accepted_answers", { mode: "json" }).$type<string[]>(),
   explanation: text("explanation").notNull(),
-  questionType: text("question_type", { enum: questionTypes }).notNull(),
+  // Preserve the original column and its CHECK without rebuilding learning records.
+  legacyQuestionType: text("legacy_question_type").notNull().$defaultFn(() => "SHORT_ANSWER"),
+  questionType: text("question_type", { enum: questionTypes }).notNull().default("SHORT_ANSWER"),
   topic: text("topic").notNull(),
   difficulty: text("difficulty", { enum: difficulties }).notNull(),
   language: text("language"),
@@ -60,7 +65,8 @@ export const problems = sqliteTable("problems", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`)
     .$onUpdate(() => new Date()),
 }, (table) => [
-  check("question_type_check", sql`${table.questionType} in ('CODE_OUTPUT', 'SQL_OUTPUT', 'NORMALIZATION', 'NETWORK_CALCULATION', 'SHORT_ANSWER')`),
+  check("question_type_check", sql`${table.legacyQuestionType} in ('CODE_OUTPUT', 'SQL_OUTPUT', 'NORMALIZATION', 'NETWORK_CALCULATION', 'SHORT_ANSWER')`),
+  check("question_type_v2_check", sql`${table.questionType} in ('CODE_OUTPUT', 'SQL_OUTPUT', 'NORMALIZATION', 'NETWORK_CALCULATION', 'SHORT_ANSWER', 'SQL_BLANK', 'CODE_BLANK')`),
   check("difficulty_check", sql`${table.difficulty} in ('EASY', 'MEDIUM', 'HARD')`),
   check("source_type_check", sql`${table.sourceType} in ('SAMPLE', 'MANUAL', 'GAMJA_REFERENCE', 'MOONEO_REFERENCE', 'RESTORED_EXAM', 'JUNGSIL_PREDICTED')`),
   check("problem_status_check", sql`${table.verificationStatus} in ('DRAFT', 'REVIEW_REQUIRED', 'CONFLICTED', 'VERIFIED')`),

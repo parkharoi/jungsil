@@ -20,6 +20,46 @@
 
 ---
 
+## ⚡ 안정적으로 실행하기 — Windows PowerShell
+
+일상적인 문제 풀이는 개발 모드 대신 빌드한 서버로 실행합니다. 프로젝트 폴더의 `Start-JungSil.cmd`를 더블클릭해도 됩니다. 실행 창을 닫으면 서버도 종료되므로 켜 두세요. PC를 재부팅했다면 다시 실행해야 합니다.
+
+```powershell
+Set-Location -LiteralPath 'D:\Projects\jungsil'
+npm.cmd start
+```
+
+접속 주소: [http://localhost:3000](http://localhost:3000). 최초 실행 또는 소스 변경 후에는 실행 중인 서버를 `Ctrl+C`로 종료하고 아래 순서로 실행하세요. 빌드가 실패하면 서버를 시작하지 않습니다.
+
+```powershell
+npm.cmd run build
+if ($LASTEXITCODE -ne 0) { throw '빌드 실패: 위 오류를 확인하세요.' }
+npm.cmd start
+```
+
+`Failed to Load Page`는 서버가 실행되지 않거나 종료된 경우에도 표시됩니다. 시작 시 `EADDRINUSE`가 나오면 3000번 포트를 사용하는 기존 서버 창을 확인하세요. 다른 프로그램을 임의로 종료하지 마세요. 개발 모드의 Turbopack 연결 충돌을 피하도록 `dev`와 `build`는 Webpack을 사용합니다. 메모리 할당 실패가 발생하면 실행 중인 앱을 줄이고 Windows 가상 메모리 설정에서 페이징 파일이 비활성화되어 있는지 확인하세요.
+
+### 코드 수정용 개발 서버
+
+VS Code에서 **터미널 → 새 터미널**을 열고 실행하세요. 이미 설치와 DB 준비가 끝난 이 PC에서는 아래 두 줄이면 됩니다.
+
+```powershell
+Set-Location -LiteralPath 'D:\Projects\jungsil'
+npm.cmd run dev
+```
+
+터미널에 `Ready`가 표시되면 [http://localhost:3000](http://localhost:3000)을 여세요.
+메인에서 정실이 D-day와 **2026년 1회·2회** 회차 카드를 볼 수 있습니다. 문제 데이터는 이 PC의 로컬 DB에 저장되어 있으며 새로 내려받은 저장소에 자동으로 포함되지는 않습니다.
+
+- 실행 중에는 터미널을 켜 두세요. 종료는 `Ctrl+C`입니다.
+- 다른 포트로 실행됐으면 터미널의 `Local` 주소로 접속하세요.
+- 직접 포트를 정하려면 `npm.cmd run dev -- --port 3001`을 실행하고 `http://localhost:3001`로 접속하세요.
+- PowerShell에서는 `npm.ps1` 실행 정책 오류를 피하도록 `npm.cmd`를 사용합니다.
+- 처음 설치하는 PC의 준비 과정은 아래 [실행 방법](#-실행-방법)을 참고하세요.
+- 새 PDF를 추가하려면 [PDF 기출문제 직접 추가하기](#-pdf-기출문제-직접-추가하기)를 따라 하세요.
+
+---
+
 ## 📌 정실이는 어떤 프로젝트인가요?
 
 정보처리기사 실기는 단순 암기만으로 대비하기 어렵습니다.
@@ -160,29 +200,102 @@ JungSil/
 
 ## 🚀 실행 방법
 
-### 1. 저장소 이동
+### 처음 설치하는 PC
 
-```bash
-cd D:\Projects\JungSil
+Node.js 22 이상과 npm이 필요합니다. Windows PowerShell에서 아래 명령을 **한 단계씩**, 성공 여부를 확인하며 실행하세요.
+
+```powershell
+Set-Location -LiteralPath 'D:\Projects\jungsil'
+npm.cmd install
+npm.cmd run db:migrate
+npm.cmd run dev
 ```
 
-### 2. 패키지 설치
+이미 DB가 있는 PC에서 스키마를 업데이트할 때는 먼저 `node node_modules/tsx/dist/cli.mjs scripts/backup-database.ts`로 백업하고, 성공한 뒤 `npm.cmd run db:migrate`를 실행하세요. 새 PC에 DB가 아직 없으면 백업 단계는 필요하지 않습니다.
 
-```bash
-npm install
+[메인](http://localhost:3000) · [기출문제 모음](http://localhost:3000/problems) · [오답노트](http://localhost:3000/wrong-answers) · [취약점 분석](http://localhost:3000/stats)
+
+서버 실행 명령과 포트 옵션: [Next.js 공식 CLI 문서](https://nextjs.org/docs/app/api-reference/cli/next).
+
+---
+
+## 📥 PDF 기출문제 직접 추가하기
+
+**현재는 PDF 업로드·자동 변환 기능이 없습니다.** PDF를 폴더에 넣는 것만으로 문제는 등록되지 않습니다. **PDF → 검토한 JSON → 검증 → 백업 → Import** 순서로 추가합니다.
+
+### 1. PDF와 새 JSON 파일 준비
+
+PDF 원본은 `data/private/`에 보관하고, [JSON 예제](data/templates/questions.example.json)를 편집기에서 열어 **다른 이름으로 저장**하세요. 예를 들어 `data/private/2025-3.json`처럼 실제 PDF의 연도·회차로 이름을 붙입니다. 아래 명령의 `2025-3.json`도 본인이 만든 파일명으로 바꾸세요.
+
+이 PC의 `data/private/2026-1.json`, `data/private/2026-2.json`은 기존 등록 자료입니다. 구조를 참고할 수 있지만 새 회차를 만들 때 덮어쓰지는 마세요. `data/private/`는 Git에서 제외되므로 원본 PDF와 JSON은 별도로 보관하세요.
+
+### 2. PDF 내용을 JSON에 옮기기
+
+예제의 `exam`은 회차 정보, `problems` 배열은 개별 문제입니다. 예제는 자체 제작 샘플이므로 문제뿐 아니라 출처와 회차 정보도 실제 자료에 맞게 바꿔야 합니다.
+
+| 위치 | 작성할 내용 |
+| --- | --- |
+| `exam.certification` | `정보처리기사` |
+| `exam.examYear`, `exam.examRound` | 실제 연도·회차. 파일명만 바꿔서는 새 회차가 되지 않습니다. |
+| `exam.examDate`, `exam.title` | 확인한 시험 날짜(`YYYY-MM-DD`)와 회차 제목 |
+| `exam.questionCount` | 전체 예정 문항 수. 20문항이면 `20` |
+| `exam.sourceType` 및 각 문제의 `sourceType` | 복원 기출은 `RESTORED_EXAM` |
+| 각 문제의 `questionNumber` | 회차 안에서 중복되지 않는 번호 |
+| `content`, `code` | 문제 본문·보기·표·그림의 필요한 정보, 별도 코드 |
+| `questionType`, `topic`, `difficulty`, `language` | 문제 유형·주제·난이도·언어. 허용 값은 [Import 안내](IMPORT.md) 참고 |
+| `answer`, `acceptedAnswers` | 대표 정답과 허용할 다른 정답 표현 |
+| `sourceName`, `sourceUrl` | 출처 이름과 원문 HTTP(S) 주소. `RESTORED_EXAM`에는 URL 필수 |
+| `explanation`, `verificationNote` | 대조한 해설과 검수 근거 |
+| `redistributionAllowed` | 제공 자료의 재배포 허용 여부. 허용받지 않았다면 `false` |
+
+PDF에서 텍스트를 복사하되 코드의 들여쓰기·연산자·표의 행/열을 원본과 대조하세요. 스캔 PDF라 복사가 안 되면 OCR 또는 직접 입력이 필요하며, 추출 결과를 그대로 정답으로 믿으면 안 됩니다. JSON 문자열 안의 줄바꿈은 `\n`, 큰따옴표는 `\"`로 적습니다.
+
+번호가 무작위로 표시된 PDF라면 **PDF 표시 순서**로 관리하고 제목·검수 메모에도 그렇게 적으세요. 실제 출제 순서로 표시하지 않습니다. 정답이 없거나 불확실한 문항은 임의로 채우지 말고, 정답을 확인한 문항부터 부분 등록할 수 있습니다.
+
+### 3. 검수 상태 정하기
+
+- 작성 중에는 예제의 `VERIFIED` 값을 그대로 두지 말고 회차와 문제를 `REVIEW_REQUIRED`로 바꾸세요.
+- 본문·보기·코드·정답을 대조한 문제만 `verificationStatus: "VERIFIED"`로 바꿉니다. 이때 `explanation`과 `verificationNote`가 필수입니다.
+- **개별 문제가 `VERIFIED`여야 풀이 화면에 표시됩니다.** 회차만 `VERIFIED`로 바꿔도 문제들이 일괄 승인되지는 않습니다.
+- SQL·코드 빈칸은 `SQL_BLANK`·`CODE_BLANK`와 `answerParts`를 사용합니다. 작성 예시는 [빈칸 문제 안내](IMPORT.md#빈칸-문제)를 참고하세요.
+
+### 4. 검증 → 백업 → 등록
+
+JSON을 UTF-8로 저장한 후 아래 명령을 실행하세요. **실제 DB에 문제를 추가하는 명령**이며, 검증 또는 백업이 실패하면 Import를 중단합니다. 백업 중에는 답안 제출 등 DB를 변경하는 작업을 잠시 멈추세요.
+
+```powershell
+Set-Location -LiteralPath 'D:\Projects\jungsil'
+$questionFile = 'data/private/2025-3.json'
+
+npm.cmd run questions:validate -- --file $questionFile
+if ($LASTEXITCODE -ne 0) {
+  throw 'JSON 검증 실패: 오류를 수정한 뒤 다시 실행하세요.'
+}
+
+node node_modules/tsx/dist/cli.mjs scripts/backup-database.ts
+if ($LASTEXITCODE -ne 0) {
+  throw '백업 실패: 문제를 등록하지 않습니다.'
+}
+
+npm.cmd run questions:import -- --file $questionFile
+if ($LASTEXITCODE -ne 0) {
+  throw 'Import 오류: 출력 내용을 확인하세요.'
+}
 ```
 
-### 3. 개발 서버 실행
+`validate`는 실제 DB를 읽기 전용으로 확인하며 형식·중복 등을 검사합니다. **문제 정답의 정확성을 판정하거나 Import의 모든 변경을 미리 보여주는 dry-run은 아닙니다.** 백업 파일은 `data/backups/`에 생성되고 `VERIFIED BACKUP:` 뒤에 정확한 경로가 출력됩니다.
 
-```bash
-npm run dev
-```
+등록 결과의 `inserted`는 추가, `updated`는 수정, `skipped`는 동일해서 건너뜀, `conflicted`는 충돌 문항 수입니다. `등록 20/20, 누락 0문항`처럼 등록 수·누락 번호와 검수 상태를 확인하세요.
 
-### 4. 브라우저 접속
+현재 로컬의 `audit-2026-2.ts`, `backup-2026-2.cjs` 등은 **2026년 2회 추가 당시의 일회성 스크립트**입니다. 다른 PDF를 추가할 때 재사용하지 말고 위의 공용 명령을 사용하세요.
 
-```text
-http://localhost:3000
-```
+### 5. 화면에서 확인 및 충돌 처리
+
+서버가 꺼져 있으면 `npm.cmd run dev`로 실행하고 메인 또는 `/problems`를 새로고침하세요. 새 회차 카드를 열어 등록 문항 수와 실제 문제를 확인합니다. 회차는 있는데 풀이 가능한 문제가 없다면 각 문제의 `verificationStatus`를 확인하세요.
+
+같은 파일을 다시 등록해도 내용이 같으면 중복 생성하지 않습니다. 파일에 없는 기존 문제와 학습 기록은 삭제하지 않습니다. 다만 같은 회차·번호의 메타데이터는 갱신될 수 있고, 본문·정답 등이 달라지면 기존 내용을 보존하면서 `CONFLICTED`로 바뀌어 풀이에서 숨겨질 수 있습니다. 충돌은 오류 종료와 다르므로 결과의 `conflicted` 값을 반드시 확인하세요.
+
+`--resolve-conflicts`는 기존 내용·정답을 교체할 수 있으므로 일반 추가 명령에는 넣지 않습니다. 충돌을 발견하면 원본을 비교한 뒤 [갱신과 충돌 안내](IMPORT.md#갱신과-충돌)에 따라 처리하세요. Import 트랜잭션 내부 오류는 롤백되지만 커밋 후 결과 출력 오류까지 자동으로 되돌리는 것은 아닙니다.
 
 ---
 

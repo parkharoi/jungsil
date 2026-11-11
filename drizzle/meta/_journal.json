@@ -29,6 +29,13 @@
       "when": 1790145203411,
       "tag": "0003_problem_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790569984614,
+      "tag": "0004_question_types",
+      "breakpoints": true
     }
   ]
 }

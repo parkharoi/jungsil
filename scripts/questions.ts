@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { checkDatabase, importBundle, validateBundle, ValidationError } from "./question-import";
+import { checkDatabase, examProgress, missingNumbers, importBundle, validateBundle, ValidationError } from "./question-import";
 
 try {
   const { values, positionals } = parseArgs({ options: { file: { type: "string" }, "resolve-conflicts": { type: "boolean", default: false } }, allowPositionals: true });
@@ -17,11 +17,15 @@ try {
     const db = drizzle(sqlite);
     if (mode === "validate") {
       checkDatabase(db, bundle);
-      console.log(`검증 성공: ${bundle.problems.length}문제. DB 변경 없음.`);
+      console.log(`검증 성공: 입력 ${bundle.problems.length}/${bundle.exam.questionCount}문제. DB 변경 없음.`);
+      console.log("입력 파일 누락 번호: " + missingNumbers(bundle.exam.questionCount, bundle.problems.map(q => q.questionNumber!)).join(", "));
     } else {
       sqlite.pragma("foreign_keys = ON");
       const counts = importBundle(db, input, values["resolve-conflicts"]);
       console.log(JSON.stringify(counts));
+      const progress = examProgress(db, bundle.exam);
+      console.log(`등록 ${progress.registered}/${progress.expected}, 누락 ${progress.missingNumbers.length}문항`);
+      console.log(JSON.stringify(progress));
       if (counts.conflicted) console.log("충돌 문제의 기존 내용·정답은 보존되며 풀이에서 숨겨집니다. 원본 JSON과 출처를 검토하세요.");
     }
   } finally { sqlite.close(); }

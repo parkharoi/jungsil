@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "next dev --webpack --port 3000",
+    "build": "next build --webpack",
+    "start": "next start --port 3000",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
@@ -14,7 +14,9 @@
     "questions:validate": "tsx scripts/questions.ts validate",
     "questions:import": "tsx scripts/questions.ts import",
     "test:http": "tsx scripts/check-problem-http.ts",
-    "test:learning": "tsx scripts/check-learning.ts"
+    "test:learning": "tsx scripts/check-learning.ts",
+    "test:question-types": "tsx scripts/check-question-types.ts",
+    "test:exams": "tsx scripts/check-exams.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

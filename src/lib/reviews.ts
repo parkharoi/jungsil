@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { examSets, problemAttempts, problems, questionTypes, sourceTypes } from "@/db/schema";
-import { InvalidFilterError } from "@/lib/problems";
+import { InvalidFilterError, problemDisplayTitle } from "@/lib/problems";
+import { gradeParts, isBlankType, parseStoredAnswers } from "@/lib/answer-parts";
 import { reviewLabels, type ReviewStatus } from "@/lib/learning-labels";
 
 // Same-second submissions use SQLite rowid, matching the existing attempts API.
@@ -80,10 +81,11 @@ export function listWrongAnswers(params: URLSearchParams) {
     }
   }
   const rows = db.with(ordered, totals, review).select({
-    problemId: problems.id, title: problems.title, content: problems.content, questionType: problems.questionType,
+    problemId: problems.id, title: problemDisplayTitle, content: problems.content, questionType: problems.questionType,
     topic: problems.topic, subTopic: problems.subTopic, language: problems.language, difficulty: problems.difficulty,
     sourceType: problems.sourceType, examYear: year, examRound: round, questionNumber: problems.questionNumber,
     wrongCount: review.wrongCount, totalAttemptCount: review.totalAttemptCount,
+    answerParts: problems.answerParts,
     latestWrongAnswer: review.latestWrongAnswer, correctAnswer: problems.answer, explanation: problems.explanation,
     latestWrongAt: review.latestWrongAt, latestAttemptCorrect: review.latestAttemptCorrect,
     consecutiveCorrectCount: review.consecutiveCorrectCount, reviewStatus: status, latestWrongId: review.latestWrongId,
@@ -92,8 +94,11 @@ export function listWrongAnswers(params: URLSearchParams) {
       asc(sql`case when ${status} = 'NOT_REVIEWED' then 0 when ${status} = 'REVIEWING' then 1 else 2 end`),
       desc(review.wrongCount), desc(review.latestWrongAt), asc(problems.id),
     ).limit(limit).offset(Number(offset)).all();
-  return rows.map(({ latestWrongId, ...row }) => ({
-    ...row, latestWrongAt: new Date(row.latestWrongAt! * 1000).toISOString(),
+  return rows.map(({ latestWrongId, answerParts, ...row }) => ({
+    ...row,
+    results: isBlankType(row.questionType) && answerParts?.length ? gradeParts(answerParts, parseStoredAnswers(row.latestWrongAnswer)) : null,
+    latestWrongCorrect: false,
+    latestWrongAt: new Date(row.latestWrongAt! * 1000).toISOString(),
     // Keep the earlier API's nested metadata for existing consumers.
     problem: { id: row.problemId, title: row.title, topic: row.topic, subTopic: row.subTopic, language: row.language, questionType: row.questionType, difficulty: row.difficulty },
     latestWrongAttempt: { attemptId: latestWrongId, userAnswer: row.latestWrongAnswer, submittedAt: new Date(row.latestWrongAt! * 1000).toISOString() },

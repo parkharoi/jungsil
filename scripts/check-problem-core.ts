@@ -46,8 +46,8 @@ async function main() {
     for (const table of [examSets, problems, problemAttempts]) {
       const config = getTableConfig(table);
       const columns = sqlite.pragma('table_info("' + config.name + '")') as { name: string; type: string; notnull: number }[];
-      assert.deepEqual(columns.map(c => [c.name, c.type.toLowerCase(), !!c.notnull]),
-        config.columns.map(c => [c.name, c.getSQLType(), c.notNull]));
+      assert.deepEqual(columns.map(c => [c.name, c.type.toLowerCase(), !!c.notnull]).sort(),
+        config.columns.map(c => [c.name, c.getSQLType(), c.notNull]).sort());
     }
     assert.equal(sqlite.pragma("foreign_keys", { simple: true }), 1);
     const indexes = sqlite.pragma("index_list(problem_attempts)") as { name: string }[];
