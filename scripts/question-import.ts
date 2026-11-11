@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { difficulties, examSets, importSourceTypes, languages, problems, questionTypes, verificationStatuses } from "../src/db/schema";
+import { difficulties, examSets, importSourceTypes, languages, problems, questionTypes, verificationStatuses, type AnswerPart } from "../src/db/schema";
+
+import { isBlankType } from "../src/lib/answer-parts";
 
 type Exam = Omit<typeof examSets.$inferInsert, "id" | "createdAt" | "updatedAt">;
 type Question = Omit<typeof problems.$inferInsert, "id" | "examSetId" | "createdAt" | "updatedAt">;
@@ -68,11 +70,11 @@ export function validateBundle(input: unknown): Bundle {
   if (date.slice(0, 4) !== String(exam.examYear)) error("exam.examDate", "examYear와 연도가 다릅니다.");
   const rawProblems = Array.isArray(root.problems) ? root.problems : [];
   if (!Array.isArray(root.problems)) error("problems", "배열이 필요합니다.");
-  if (rawProblems.length !== exam.questionCount) error("exam.questionCount", "실제 문제 수와 일치해야 합니다.");
+  if (rawProblems.length < 1 || rawProblems.length > exam.questionCount) error("problems", "예정 문항 수 이내에서 한 문제 이상 필요합니다.");
   const numbers = new Set<number>(), hashes = new Set<string>();
   const questions = rawProblems.map((value, index): Question => {
     const path = `problems[${index}]`, q = object(value, path);
-    keys(q, "title questionNumber questionType topic subTopic difficulty language content code answer acceptedAnswers explanation memoryTip examTip sourceType sourceName sourceUrl secondarySourceUrl verificationStatus verificationNote contentHash redistributionAllowed", path);
+    keys(q, "title questionNumber questionType topic subTopic difficulty language content code answer answerParts acceptedAnswers explanation memoryTip examTip sourceType sourceName sourceUrl secondarySourceUrl verificationStatus verificationNote contentHash redistributionAllowed", path);
     const n = number(q.questionNumber, `${path}.questionNumber`, 1, exam.questionCount);
     if (numbers.has(n)) error(`${path}.questionNumber`, "회차 내 문제 번호가 중복됩니다.");
     numbers.add(n);
@@ -91,15 +93,44 @@ export function validateBundle(input: unknown): Bundle {
       else acceptedAnswers = q.acceptedAnswers.map((a, i) => str(a, `${path}.acceptedAnswers[${i}]`));
     }
     if (q.redistributionAllowed !== undefined && typeof q.redistributionAllowed !== "boolean") error(`${path}.redistributionAllowed`, "boolean이 필요합니다.");
+    const questionType = enumeration(q.questionType, questionTypes, `${path}.questionType`);
+    let answerParts: AnswerPart[] | null = null;
+    if (isBlankType(questionType)) {
+      if (!Array.isArray(q.answerParts) || !q.answerParts.length || q.answerParts.length > 100) error(`${path}.answerParts`, "1~100개의 빈칸 배열이 필요합니다.");
+      else {
+        const seen = new Set<string>();
+        answerParts = q.answerParts.map((value, index) => {
+          const partPath = `${path}.answerParts[${index}]`, part = object(value, partPath);
+          keys(part, "key label answer acceptedAnswers", partPath);
+          const key = str(part.key, partPath + ".key").trim();
+          if (key.length > 100 || /[()\s]/u.test(key)) error(partPath + ".key", "빈칸 키에는 공백·괄호를 사용할 수 없고 100자 이하여야 합니다.");
+          if (seen.has(key)) error(partPath + ".key", "중복 빈칸 키입니다.");
+          seen.add(key);
+          const answer = str(part.answer, partPath + ".answer");
+          let acceptedAnswers: string[] | undefined;
+          if (part.acceptedAnswers !== undefined) {
+            if (!Array.isArray(part.acceptedAnswers)) error(partPath + ".acceptedAnswers", "문자열 배열이 필요합니다.");
+            else acceptedAnswers = part.acceptedAnswers.map((a, i) => str(a, `${partPath}.acceptedAnswers[${i}]`));
+          }
+          if ([answer, ...(acceptedAnswers ?? [])].some(a => a.length > 10000)) error(partPath, "정답은 빈칸당 10,000자 이하여야 합니다.");
+          return { key, ...(part.label === undefined ? {} : { label: str(part.label, partPath + ".label") }), answer, ...(acceptedAnswers ? { acceptedAnswers } : {}) };
+        });
+        // Circled numbers are reserved blank markers, even inside code parentheses.
+        // Other keys use the explicit spaced form "( key )" to distinguish function calls.
+        const text = content + "\n" + (code ?? "");
+        const markers = new Set([...text.matchAll(/\(\s*([①-⑳㉑-㉟㊱-㊿])\s*\)|\(\s+([^()\s]+)\s+\)/gu)].map(match => match[1] ?? match[2]));
+        if ([...seen].some(key => !markers.has(key)) || [...markers].some(key => !seen.has(key))) error(`${path}.answerParts`, "content/code의 빈칸 표기와 key가 일치해야 합니다.");
+      }
+    } else if (q.answerParts !== undefined && q.answerParts !== null) error(`${path}.answerParts`, "빈칸 유형에서만 사용할 수 있습니다.");
     const answer = str(q.answer, `${path}.answer`);
     if ([answer, ...(acceptedAnswers ?? [])].some((a) => a.length > 10000)) error(`${path}.answer`, "대표·허용 정답은 제출 제한인 10,000자 이하여야 합니다.");
     return {
       title: q.title === undefined ? `${exam.title} ${n}번` : str(q.title, `${path}.title`),
-      questionNumber: n, questionType: enumeration(q.questionType, questionTypes, `${path}.questionType`),
+      questionNumber: n, questionType,
       topic: str(q.topic, `${path}.topic`), subTopic: str(q.subTopic, `${path}.subTopic`, false) || null,
       difficulty: enumeration(q.difficulty, difficulties, `${path}.difficulty`),
       language: q.language == null ? null : enumeration(q.language, languages, `${path}.language`),
-      content, code, contentHash: hash, answer, acceptedAnswers,
+      content, code, contentHash: hash, answer, answerParts, acceptedAnswers,
       explanation: str(q.explanation, `${path}.explanation`, status === "VERIFIED"),
       verificationNote: str(q.verificationNote, `${path}.verificationNote`, status === "VERIFIED") || null,
       memoryTip: str(q.memoryTip, `${path}.memoryTip`, false) || null,
@@ -144,8 +175,7 @@ export function importBundle(db: BetterSQLite3Database, input: unknown, resolveC
     checkDatabase(tx, bundle);
     const counts = { inserted: 0, updated: 0, skipped: 0, conflicted: 0 };
     let exam = existingExam(tx, bundle.exam);
-    if (!exam) exam = tx.insert(examSets).values(bundle.exam).returning().get();
-    else if (changed(exam, bundle.exam)) tx.update(examSets).set(bundle.exam).where(eq(examSets.id, exam.id)).run();
+    if (!exam) exam = tx.insert(examSets).values({ ...bundle.exam, verificationStatus: bundle.exam.verificationStatus === "DRAFT" ? "DRAFT" : "REVIEW_REQUIRED" }).returning().get();
     for (const q of bundle.problems) {
       const old = tx.select().from(problems).where(and(eq(problems.examSetId, exam.id), eq(problems.questionNumber, q.questionNumber!))).get();
       const next = { ...q, examSetId: exam.id };
@@ -155,6 +185,7 @@ export function importBundle(db: BetterSQLite3Database, input: unknown, resolveC
         continue;
       }
       const conflict = old.verificationStatus === "CONFLICTED" || contentHash(old.content, old.code) !== q.contentHash
+        || JSON.stringify(old.answerParts) !== JSON.stringify(q.answerParts) || old.questionType !== q.questionType
         || old.answer !== q.answer || JSON.stringify(old.acceptedAnswers ?? []) !== JSON.stringify(q.acceptedAnswers ?? []);
       if (conflict && !(resolveConflicts && q.verificationStatus === "VERIFIED" && q.verificationNote)) {
         if (old.verificationStatus !== "CONFLICTED") tx.update(problems).set({ verificationStatus: "CONFLICTED" }).where(eq(problems.id, old.id)).run();
@@ -164,6 +195,31 @@ export function importBundle(db: BetterSQLite3Database, input: unknown, resolveC
         counts.updated++;
       } else counts.skipped++;
     }
+    const progress = examProgress(tx, bundle.exam);
+    const verificationStatus = progress.missingNumbers.length || progress.verified !== progress.registered
+      ? bundle.exam.verificationStatus === "DRAFT" ? "DRAFT" : "REVIEW_REQUIRED"
+      : bundle.exam.verificationStatus;
+    const nextExam = { ...bundle.exam, verificationStatus };
+    if (changed(exam, nextExam)) tx.update(examSets).set(nextExam).where(eq(examSets.id, exam.id)).run();
     return counts;
   }, { behavior: "immediate" });
+}
+
+export function missingNumbers(expected: number, registered: number[]) {
+  const present = new Set(registered);
+  return Array.from({ length: expected }, (_, index) => index + 1).filter(number => !present.has(number));
+}
+
+export function examProgress(db: BetterSQLite3Database, identity: Exam) {
+  const exam = existingExam(db, identity);
+  const rows = exam ? db.select({ number: problems.questionNumber, status: problems.verificationStatus }).from(problems)
+    .where(eq(problems.examSetId, exam.id)).all() : [];
+  return {
+    expected: identity.questionCount, registered: rows.length,
+    verified: rows.filter(row => row.status === "VERIFIED").length,
+    reviewRequired: rows.filter(row => row.status === "REVIEW_REQUIRED").length,
+    conflicted: rows.filter(row => row.status === "CONFLICTED").length,
+    draft: rows.filter(row => row.status === "DRAFT").length,
+    missingNumbers: missingNumbers(identity.questionCount, rows.map(row => row.number!)),
+  };
 }

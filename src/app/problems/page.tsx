@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ExamCards from "../exam-cards";
 import { difficultyLabels, getFilterOptions, InvalidFilterError, listProblems, questionTypeLabels } from "@/lib/problems";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export default async function ProblemsPage({
     if (Array.isArray(value)) value.forEach((item) => query.append(key, item));
     else if (value !== undefined) query.append(key, value);
   }
+  const allView = query.get("view") === "all" || ["questionType", "topic", "difficulty", "language"].some(key => query.has(key));
+  query.delete("view");
   const options = getFilterOptions();
   let rows: ReturnType<typeof listProblems> = [];
   let error = "";
@@ -31,11 +34,15 @@ export default async function ProblemsPage({
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-12 sm:px-8">
       <Link href="/" className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">JungSil · 정실이</Link>
-      <h1 className="mt-6 text-3xl font-bold tracking-tight">문제 목록</h1>
-      <p className="mt-3 text-zinc-600 dark:text-zinc-400">유형과 주제로 문제를 찾아 개념을 익혀보세요.</p>
+      <h1 className="mt-6 text-3xl font-bold tracking-tight">{allView ? "유형별 문제 연습" : "기출문제"}</h1>
+      <p className="mt-3 text-zinc-600 dark:text-zinc-400">회차별로 이어 풀거나, 유형과 주제로 골라 연습해 보세요.</p>
       <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">JungSil Sample은 직접 만든 학습용 문제이며 실제 기출문제가 아닙니다.</p>
 
+      {!allView && <ExamCards />}
+      <details open={allView}>
+      <summary className="my-6 cursor-pointer font-semibold">개별 문제 · 유형별로 연습하기</summary>
       <form key={query.toString()} action="/problems" method="get" className="my-8 grid gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-5 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <input type="hidden" name="view" value="all" />
         {fields.map(({ key, label }) => (
           <label key={key} className="grid gap-2 text-sm font-medium">
             {label}
@@ -78,6 +85,7 @@ export default async function ProblemsPage({
           )}
         </>
       )}
+      </details>
     </main>
   );
 }

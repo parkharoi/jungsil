@@ -1,10 +1,10 @@
 import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { problemAttempts, problems } from "@/db/schema";
-import { InvalidFilterError } from "@/lib/problems";
+import { InvalidFilterError, problemDisplayTitle } from "@/lib/problems";
 
 const problemInfo = {
-  id: problems.id, title: problems.title, topic: problems.topic, subTopic: problems.subTopic,
+  id: problems.id, title: problemDisplayTitle, topic: problems.topic, subTopic: problems.subTopic,
   language: problems.language, questionType: problems.questionType, difficulty: problems.difficulty,
 };
 

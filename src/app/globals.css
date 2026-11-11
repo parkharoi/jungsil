@@ -24,3 +24,26 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.journey-scene { position: relative; height: 210px; overflow: hidden; border-radius: 16px; background: linear-gradient(#e5ecdb, #f1f1df); }
+.journey-sun { position: absolute; width: 46px; height: 46px; border-radius: 50%; background: #e8c77b; right: 25%; top: 25px; }
+.journey-mountain { position: absolute; width: 65%; height: 130px; border-radius: 60% 80% 0 0; bottom: 23px; transform: rotate(-9deg); }
+.mountain-back { background: #d0dcc6; left: 0; }
+.mountain-front { background: #c0d1b4; right: -8%; height: 105px; transform: rotate(8deg); }
+.journey-cloud { position: absolute; color: #fffdf1; font-size: 62px; line-height: 1; }
+.cloud-one { left: 13%; top: 10px; }.cloud-two { left: 49%; top: 37px; font-size: 40px; }
+.journey-gate { position: absolute; right: 18px; bottom: 31px; width: 83px; height: 90px; }
+.journey-gate > span { display: block; text-align: center; font-size: 10px; font-weight: bold; margin-bottom: 7px; }
+.gate-roof { height: 22px; background: #394f46; clip-path: polygon(15% 50%, 28% 5%, 73% 5%, 85% 50%, 100% 85%, 0 85%); }
+.gate-pillars { margin: -3px auto 0; height: 55px; width: 58px; border: 8px solid #aa7250; border-bottom: 0; background: #faf4d866; }
+.journey-track { position: absolute; height: 8px; bottom: 24px; left: 44px; right: 58px; border-radius: 10px; background: #d9cdb0; }
+.journey-trail { height: 100%; background: #72916d; border-radius: inherit; transition: width 1s; }
+.scholar-position { position: absolute; bottom: 3px; transform: translateX(-50%); transition: left 1s; }
+.scholar-name { display: block; margin-bottom: -2px; text-align: center; font-size: 10px; font-weight: bold; }
+.scholar-body { animation: scholar-bob .4s ease-in-out infinite alternate; }
+.scholar-leg { transform-origin: 51px 88px; animation: scholar-run .4s ease-in-out infinite alternate; }
+.leg-back { animation-delay: -.4s; }
+.arrived .scholar-body, .arrived .scholar-leg { animation: none; }
+@keyframes scholar-bob { to { transform: translateY(-3px) rotate(2deg); } }
+@keyframes scholar-run { from { transform: rotate(-22deg); } to { transform: rotate(22deg); } }
+@media (prefers-reduced-motion: reduce) { .scholar-body, .scholar-leg { animation: none; } .scholar-position, .journey-trail { transition: none; } }

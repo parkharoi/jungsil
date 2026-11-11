@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, sql } from "drizzle-orm";
 import { problems } from "@/db/schema";
 import { reviewQuery, queryLimit } from "@/lib/reviews";
-import { InvalidFilterError } from "@/lib/problems";
+import { InvalidFilterError, problemDisplayTitle } from "@/lib/problems";
 import { weaknessLevels } from "@/lib/learning-labels";
 
 export const dimensions = ["topic", "subTopic", "language", "questionType", "sourceType"] as const;
@@ -51,7 +51,7 @@ export function getWeaknesses(params = new URLSearchParams()) {
     if (recommendations.length < 5 && !recommendations.some(r => r.href === href)) recommendations.push({ title, href, reason });
   };
   const reviewCandidates = (state: "NOT_REVIEWED" | "REVIEWING") => db.with(ordered, totals, review)
-    .select({ id: problems.id, title: problems.title, wrongCount: review.wrongCount })
+    .select({ id: problems.id, title: problemDisplayTitle, wrongCount: review.wrongCount })
     .from(review).innerJoin(problems, eq(problems.id, review.problemId))
     .where(and(eq(status, state), gt(review.wrongCount, state === "NOT_REVIEWED" ? 1 : 0), eq(problems.verificationStatus, "VERIFIED")))
     .orderBy(desc(review.wrongCount), desc(review.latestWrongAt), asc(problems.id)).limit(5).all();
